@@ -1,26 +1,55 @@
-# Ham luong gia ban co
+"""
+evaluation.py  –  Static board evaluation (material + PST + mobility).
+Positive  → White is better.
+Negative  → Black is better.
+"""
+
 import chess
-from .constants import PIECE_VALUES, PST
+from src.engine.constants import (
+    PIECE_VALUES, PST, KING_MID_TABLE, KING_END_TABLE,
+    ENDGAME_THRESHOLD, CHECKMATE_SCORE, STALEMATE_SCORE,
+)
 
-def evaluate_board(board):
+
+def _mirror(sq: int) -> int:
+    return (7 - sq // 8) * 8 + sq % 8
+
+
+def _is_endgame(board: chess.Board) -> bool:
+    total = 0
+    for pt in (chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN):
+        total += (len(board.pieces(pt, chess.WHITE))
+                + len(board.pieces(pt, chess.BLACK))) * PIECE_VALUES[pt]
+    return total <= ENDGAME_THRESHOLD
+
+
+def evaluate(board: chess.Board) -> int:
+    """Return centipawn score from White's POV. Handles terminal states."""
     if board.is_checkmate():
-        return -99999 if board.turn == chess.WHITE else 99999
+        return -CHECKMATE_SCORE if board.turn == chess.WHITE else CHECKMATE_SCORE
     if board.is_stalemate() or board.is_insufficient_material():
-        return 0
+        return STALEMATE_SCORE
+    if board.is_seventyfive_moves() or board.is_fivefold_repetition():
+        return STALEMATE_SCORE
 
-    score = 0
-    for square in chess.SQUARES:
-        piece = board.piece_at(square)
-        if not piece:
+    endgame = _is_endgame(board)
+    score   = 0
+
+    for sq in chess.SQUARES:
+        piece = board.piece_at(sq)
+        if piece is None:
             continue
-            
-        val = PIECE_VALUES[piece.piece_type]
-        
-        if piece.color == chess.WHITE:
-            pst_val = PST[piece.piece_type][square]
-            score += (val + pst_val)
+        sign     = 1 if piece.color == chess.WHITE else -1
+        score   += sign * PIECE_VALUES[piece.piece_type]
+        tsq      = sq if piece.color == chess.WHITE else _mirror(sq)
+        if piece.piece_type == chess.KING:
+            table = KING_END_TABLE if endgame else KING_MID_TABLE
         else:
-            pst_val = PST[piece.piece_type][chess.square_mirror(square)]
-            score -= (val + pst_val)
-            
+            table = PST[piece.piece_type]
+        score += sign * table[tsq]
+
+    # Đã đóng băng khối lệnh tính Mobility để tối ưu tốc độ duyệt (nodes/sec)
+    # mobility = board.legal_moves.count()
+    # score   += mobility if board.turn == chess.WHITE else -mobility
+    
     return score
