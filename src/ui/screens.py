@@ -1,591 +1,554 @@
 """
-ui/screens.py
-Tất cả các màn hình (Screen) của game cờ vua:
-  - MenuScreen    : Màn hình chính
-  - GameScreen    : Màn hình gameplay
-  - GameOverScreen: Kết quả ván đấu
-  - PauseScreen   : Tạm dừng
-  - SettingsScreen: Cài đặt
+screens.py  –  MainMenuScreen, SettingsScreen, GameScreen, GameOverScreen.
+
+Game modes
+----------
+  "hvai"  – Human (White) vs AI (Black)
+  "aivh"  – AI (White) vs Human (Black)
+  "avsa"  – AI vs AI (spectator)
+  "hvh"   – Human vs Human (local)
 """
 
-import pygame
-from typing import Callable, Optional, Dict, Any, List, Tuple
+import sys, os, threading, time, datetime
+import chess, pygame
 
-from .renderer import ChessRenderer
-from .components import Button, Label, Panel, MoveHistory
+from src.board.board_manager import BoardManager
+from src.engine.minimax      import ChessEngine
+from src.engine.constants    import (
+    WINDOW_WIDTH, WINDOW_HEIGHT, BOARD_SIZE, SQUARE_SIZE,
+    BOARD_OFFSET_X, BOARD_OFFSET_Y, FPS,
+    C_BG, C_PANEL, C_CARD, C_ACCENT, C_WHITE, C_GREY,
+    C_GREEN, C_RED, C_YELLOW,
+    DIFFICULTY, TIME_CONTROLS,
+)
+from src.ui.renderer   import Renderer
+from src.ui.components import (
+    Button, ToggleButton, EvalBar, ClockDisplay,
+    CapturedDisplay, MoveHistoryPanel, PromotionDialog,
+)
 
-# ── Hằng số giao diện ────────────────────────────────────────────────────────
-C = {
-    "bg":         ( 18,  12,   6),
-    "gold":       (180, 140,  60),
-    "gold_light": (237, 200, 110),
-    "cream":      (237, 220, 192),
-    "brown_dark": ( 44,  27,   6),
-    "brown_mid":  ( 72,  50,  20),
-    "brown_light":( 120, 85,  35),
-    "white_piece":(255, 252, 240),
-    "black_piece":( 30,  20,  10),
-    "danger":     (200,  60,  60),
-    "success":    ( 80, 160,  80),
-}
+# ── Panel geometry ─────────────────────────────────────────
+PNL_X  = BOARD_OFFSET_X + BOARD_SIZE + 28
+PNL_W  = WINDOW_WIDTH - PNL_X - 14
+PNL_Y  = BOARD_OFFSET_Y
 
 
-def _make_font(name: str, size: int, bold: bool = False) -> pygame.font.Font:
+def _fonts():
     try:
-        return pygame.font.SysFont(name, size, bold=bold)
+        sm  = pygame.font.Font(None, 17)
+        reg = pygame.font.Font(None, 20)
+        med = pygame.font.Font(None, 26)
+        big = pygame.font.Font(None, 44)
+        xl  = pygame.font.Font(None, 60)
     except Exception:
-        return pygame.font.Font(None, size)
+        sm  = pygame.font.SysFont("arial", 13)
+        reg = pygame.font.SysFont("arial", 15)
+        med = pygame.font.SysFont("arial", 20)
+        big = pygame.font.SysFont("arial", 32, bold=True)
+        xl  = pygame.font.SysFont("arial", 46, bold=True)
+    return sm, reg, med, big, xl
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  BaseScreen
-# ══════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════
+# MAIN MENU
+# ══════════════════════════════════════════════════════════
+class MainMenuScreen:
+    def __init__(self, surf):
+        self.surf = surf
+        self.sm, self.reg, self.med, self.big, self.xl = _fonts()
+        cx = WINDOW_WIDTH // 2
 
-class BaseScreen:
-    """Lớp cơ sở chung cho mọi màn hình."""
-
-    def __init__(self, surface: pygame.Surface) -> None:
-        self.surface = surface
-        self.W, self.H = surface.get_size()
-        self._buttons: List[Button] = []
-        self._next_screen: Optional[str] = None
-        self._next_data: Dict[str, Any] = {}
-
-    def handle_event(self, event: pygame.event.Event) -> None:
-        for btn in self._buttons:
-            btn.handle_event(event)
-
-    def update(self, dt: float) -> None:
-        pass
-
-    def draw(self) -> None:
-        raise NotImplementedError
-
-    def get_next(self) -> Optional[Tuple[str, Dict[str, Any]]]:
-        if self._next_screen:
-            result = (self._next_screen, self._next_data)
-            self._next_screen = None
-            self._next_data = {}
-            return result
-        return None
-
-    def _go_to(self, screen_name: str, **kwargs: Any) -> None:
-        self._next_screen = screen_name
-        self._next_data = kwargs
-
-    def _draw_bg(self, pattern: bool = True) -> None:
-        """Vẽ nền tối với họa tiết bàn cờ mờ."""
-        self.surface.fill(C["bg"])
-        if pattern:
-            cell = 48
-            alpha = 12
-            for row in range(self.H // cell + 1):
-                for col in range(self.W // cell + 1):
-                    if (row + col) % 2 == 0:
-                        r = pygame.Rect(col * cell, row * cell, cell, cell)
-                        s = pygame.Surface((cell, cell), pygame.SRCALPHA)
-                        s.fill((255, 255, 255, alpha))
-                        self.surface.blit(s, r)
-
-    def _draw_title(
-        self, text: str, y: int, size: int = 64, color=None
-    ) -> None:
-        color = color or C["gold_light"]
-        font = _make_font("Georgia", size, bold=True)
-        surf = font.render(text, True, color)
-        # Bóng chữ
-        shadow = font.render(text, True, (0, 0, 0))
-        self.surface.blit(shadow, (self.W // 2 - surf.get_width() // 2 + 3, y + 3))
-        self.surface.blit(surf, (self.W // 2 - surf.get_width() // 2, y))
-
-    def _draw_divider(self, y: int, width: int = 300) -> None:
-        x = self.W // 2 - width // 2
-        pygame.draw.line(self.surface, C["gold"], (x, y), (x + width, y), 1)
-        # Diamante central
-        pygame.draw.polygon(
-            self.surface, C["gold"],
-            [(self.W // 2, y - 4), (self.W // 2 + 4, y),
-             (self.W // 2, y + 4), (self.W // 2 - 4, y)],
-        )
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  MenuScreen
-# ══════════════════════════════════════════════════════════════════════════════
-
-class MenuScreen(BaseScreen):
-    """
-    Màn hình chính với các nút: Chơi, Cài đặt, Thoát.
-    """
-
-    LOGO = "♛  CỜ VUA  ♟"
-
-    def __init__(self, surface: pygame.Surface) -> None:
-        super().__init__(surface)
-        self._build_buttons()
-        self._tick = 0.0   # dùng cho animation logo
-
-    def _build_buttons(self) -> None:
-        cx = self.W // 2
-        btn_w, btn_h = 240, 52
-        spacing = 18
-        start_y = self.H // 2 + 20
-
-        btn_defs = [
-            ("Chơi với bạn bè",  lambda: self._go_to("game", mode="pvp")),
-            ("Chơi với máy",     lambda: self._go_to("game", mode="ai")),
-            ("Cài đặt",          lambda: self._go_to("settings")),
-            ("Thoát",            lambda: self._go_to("quit")),
+        # Mode buttons
+        self._modes = [
+            ("hvai", "Human  vs  AI"),
+            ("aivh", "AI  vs  Human"),
+            ("avsa", "AI  vs  AI  (Watch)"),
+            ("hvh",  "Human  vs  Human"),
         ]
-
-        for i, (txt, cb) in enumerate(btn_defs):
-            y = start_y + i * (btn_h + spacing)
-            btn = Button(
-                rect=pygame.Rect(cx - btn_w // 2, y, btn_w, btn_h),
-                text=txt,
-                on_click=cb,
-                color=C["brown_mid"],
-                hover_color=C["brown_light"],
-                border_radius=10,
-            )
-            self._buttons.append(btn)
-
-    def update(self, dt: float) -> None:
-        self._tick += dt
-
-    def draw(self) -> None:
-        self._draw_bg()
-
-        # Logo cờ vua nổi bật
-        import math
-        float_y = int(math.sin(self._tick * 1.5) * 5)
-        self._draw_title(self.LOGO, self.H // 4 + float_y, size=62)
-
-        # Phụ đề
-        sub_font = _make_font("Georgia", 18)
-        sub = sub_font.render("— Enjoy the Classic Game of Kings —", True, C["gold"])
-        self.surface.blit(
-            sub, (self.W // 2 - sub.get_width() // 2, self.H // 4 + 80 + float_y)
-        )
-
-        self._draw_divider(self.H // 2 + 8)
-
-        for btn in self._buttons:
-            btn.draw(self.surface)
-
-        # Footer
-        ft_font = _make_font("Georgia", 12)
-        ft = ft_font.render("v1.0  ·  Chess Engine Python", True, C["brown_light"])
-        self.surface.blit(ft, (self.W // 2 - ft.get_width() // 2, self.H - 26))
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  GameScreen
-# ══════════════════════════════════════════════════════════════════════════════
-
-class GameScreen(BaseScreen):
-    """
-    Màn hình gameplay: bàn cờ + sidebar (thông tin, lịch sử nước đi, nút).
-
-    Parameters
-    ----------
-    mode        : "pvp" | "ai"
-    game_state  : object cung cấp .board, .current_turn, v.v. (inject từ ngoài)
-    """
-
-    SIDEBAR_W = 260
-
-    def __init__(
-        self,
-        surface: pygame.Surface,
-        mode: str = "pvp",
-        game_state: Optional[Any] = None,
-    ) -> None:
-        super().__init__(surface)
-        self.mode = mode
-        self.game_state = game_state
-
-        # Tính toán vùng bàn cờ (vuông, căn trái)
-        board_size = min(self.H - 40, self.W - self.SIDEBAR_W - 40)
-        board_x = 20
-        board_y = (self.H - board_size) // 2
-        self.board_rect = pygame.Rect(board_x, board_y, board_size, board_size)
-
-        self.renderer = ChessRenderer(surface, self.board_rect)
-
-        # Sidebar
-        sb_x = self.board_rect.right + 16
-        self.sidebar_rect = pygame.Rect(sb_x, 20, self.SIDEBAR_W, self.H - 40)
-        self.sidebar_panel = Panel(self.sidebar_rect, title="Thông tin ván đấu")
-
-        # Lịch sử nước đi
-        hist_rect = pygame.Rect(
-            sb_x + 8, self.H // 2 - 20, self.SIDEBAR_W - 16, self.H // 2 - 30
-        )
-        self.move_history = MoveHistory(hist_rect, max_visible=12)
-
-        # Nút trong sidebar
-        self._build_sidebar_buttons(sb_x)
-
-        # Trạng thái UI
-        self._selected_sq: Optional[Tuple[int, int]] = None
-        self._valid_moves: List[Tuple[int, int]] = []
-        self._last_move: Optional[Any] = None
-        self._in_check_sq: Optional[Tuple[int, int]] = None
-        self._promotion_dialog: Optional[Any] = None
-        self._clock_white = 0.0
-        self._clock_black = 0.0
-
-    def _build_sidebar_buttons(self, sb_x: int) -> None:
-        btn_w = self.SIDEBAR_W - 24
-        btn_h = 38
-        gap = 10
-        btn_y = 90
-
-        defs = [
-            ("⟳  Chơi lại",    lambda: self._go_to("game", mode=self.mode)),
-            ("⏸  Tạm dừng",    lambda: self._go_to("pause")),
-            ("⬡  Menu chính",  lambda: self._go_to("menu")),
+        self._mode_btns = [
+            ToggleButton(cx-160, 220+i*58, 320, 44, label, self.med)
+            for i, (_, label) in enumerate(self._modes)
         ]
-        for txt, cb in defs:
-            self._buttons.append(
-                Button(
-                    pygame.Rect(sb_x + 12, btn_y, btn_w, btn_h),
-                    txt, cb,
-                    color=C["brown_mid"], hover_color=C["brown_light"],
-                    border_radius=8,
-                )
-            )
-            btn_y += btn_h + gap
+        self._mode_btns[0].selected = True
+        self._sel_mode = "hvai"
 
-    def handle_event(self, event: pygame.event.Event) -> None:
-        super().handle_event(event)
-
-        # Click bàn cờ
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            sq = self.renderer.pixel_to_square(*event.pos)
-            if sq:
-                self._on_square_clicked(sq)
-
-        # Scroll lịch sử
-        self.move_history.handle_event(event)
-
-        # Hộp thoại phong cấp
-        if self._promotion_dialog:
-            self._promotion_dialog.handle_event(event)
-
-    def update(self, dt: float) -> None:
-        self.renderer.update_animation()
-        # Cập nhật đồng hồ (nếu game_state cung cấp)
-        if self.game_state:
-            turn = getattr(self.game_state, "current_turn", "white")
-            if turn == "white":
-                self._clock_white += dt
-            else:
-                self._clock_black += dt
-
-    def draw(self) -> None:
-        self._draw_bg(pattern=False)
-        self.surface.fill(C["bg"])
-
-        # Sidebar
-        self.sidebar_panel.draw(self.surface)
-        self._draw_clocks()
-        self._draw_captured_pieces()
-
-        # Bàn cờ
-        board = self._get_board()
-        self.renderer.draw(
-            board,
-            selected_sq=self._selected_sq,
-            valid_moves=self._valid_moves,
-            last_move=self._last_move,
-            in_check_sq=self._in_check_sq,
-        )
-
-        # Lịch sử
-        self.move_history.draw(self.surface)
-
-        # Các nút
-        for btn in self._buttons:
-            btn.draw(self.surface)
-
-        # Hộp thoại phong cấp (vẽ trên cùng)
-        if self._promotion_dialog:
-            self._promotion_dialog.draw(self.surface)
-
-    # ── Helpers ────────────────────────────────────────────────────────────
-
-    def _on_square_clicked(self, sq: Tuple[int, int]) -> None:
-        """
-        Logic click ô cờ: chọn quân / thực hiện nước đi.
-        Kết nối với game logic bên ngoài qua game_state.
-        """
-        if self.game_state is None:
-            # Demo: chỉ highlight ô được click
-            self._selected_sq = sq
-            return
-
-        if self._selected_sq is None:
-            # Chọn quân
-            piece = self.game_state.board[sq[0]][sq[1]]
-            if piece and self.game_state.is_own_piece(piece):
-                self._selected_sq = sq
-                self._valid_moves = self.game_state.get_valid_moves(sq)
-        else:
-            if sq in self._valid_moves:
-                # Thực hiện nước đi
-                self.game_state.make_move(self._selected_sq, sq)
-                self._last_move = (self._selected_sq, sq)
-            self._selected_sq = None
-            self._valid_moves = []
-
-    def _get_board(self) -> List[List[Optional[str]]]:
-        """Lấy bàn cờ từ game_state hoặc trả về bàn trống để demo."""
-        if self.game_state:
-            return self.game_state.board
-        # Bàn cờ demo (vị trí ban đầu)
-        return _default_board()
-
-    def _draw_clocks(self) -> None:
-        font = _make_font("Consolas", 26, bold=True)
-        sb = self.sidebar_rect
-        # Đồng hồ Đen (trên)
-        t_b = int(self._clock_black)
-        s_b = f"♟  {t_b // 60:02d}:{t_b % 60:02d}"
-        surf_b = font.render(s_b, True, C["cream"])
-        self.surface.blit(surf_b, (sb.x + 12, sb.y + 45))
-        # Đồng hồ Trắng (dưới)
-        t_w = int(self._clock_white)
-        s_w = f"♙  {t_w // 60:02d}:{t_w % 60:02d}"
-        surf_w = font.render(s_w, True, C["gold_light"])
-        self.surface.blit(surf_w, (sb.x + 12, sb.y + 72))
-
-    def _draw_captured_pieces(self) -> None:
-        pass   # Mở rộng sau khi tích hợp game logic
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  GameOverScreen
-# ══════════════════════════════════════════════════════════════════════════════
-
-class GameOverScreen(BaseScreen):
-    """
-    Màn hình kết thúc ván đấu.
-
-    Parameters
-    ----------
-    winner  : "white" | "black" | "draw"
-    reason  : lý do kết thúc (checkmate, stalemate, resignation…)
-    """
-
-    WINNER_TEXT = {
-        "white": ("Trắng chiến thắng!", C["gold_light"]),
-        "black": ("Đen chiến thắng!", C["cream"]),
-        "draw":  ("Hoà cờ!",          C["gold"]),
-    }
-
-    def __init__(
-        self,
-        surface: pygame.Surface,
-        winner: str = "white",
-        reason: str = "Chiếu hết",
-    ) -> None:
-        super().__init__(surface)
-        self.winner = winner
-        self.reason = reason
-        self._build_buttons()
-
-    def _build_buttons(self) -> None:
-        cx = self.W // 2
-        btn_w, btn_h = 220, 50
-        y0 = self.H // 2 + 80
-        self._buttons = [
-            Button(
-                pygame.Rect(cx - btn_w // 2, y0, btn_w, btn_h),
-                "Chơi lại", lambda: self._go_to("game"),
-                color=C["brown_mid"], hover_color=C["brown_light"],
-            ),
-            Button(
-                pygame.Rect(cx - btn_w // 2, y0 + 68, btn_w, btn_h),
-                "Menu chính", lambda: self._go_to("menu"),
-                color=C["brown_dark"], hover_color=C["brown_mid"],
-            ),
+        # Difficulty
+        self._diffs  = list(DIFFICULTY.keys())
+        self._diff_btns = [
+            ToggleButton(cx - 200 + i*102, 470, 96, 36, d, self.reg)
+            for i, d in enumerate(self._diffs)
         ]
+        self._diff_btns[1].selected = True   # Medium default
+        self._sel_diff = "Medium"
 
-    def draw(self) -> None:
-        self._draw_bg()
-        # Overlay mờ
-        ov = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
-        ov.fill((0, 0, 0, 140))
-        self.surface.blit(ov, (0, 0))
-
-        # Card kết quả
-        card_w, card_h = 420, 320
-        card = pygame.Rect(
-            self.W // 2 - card_w // 2,
-            self.H // 2 - card_h // 2 - 40,
-            card_w, card_h,
-        )
-        card_surf = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
-        pygame.draw.rect(
-            card_surf, (28, 20, 10, 230), card_surf.get_rect(), border_radius=16
-        )
-        self.surface.blit(card_surf, card.topleft)
-        pygame.draw.rect(self.surface, C["gold"], card, width=2, border_radius=16)
-
-        txt, color = self.WINNER_TEXT.get(self.winner, ("Kết thúc", C["cream"]))
-        self._draw_title(txt, card.y + 30, size=42, color=color)
-
-        reason_font = _make_font("Georgia", 22)
-        r_surf = reason_font.render(self.reason, True, C["cream"])
-        self.surface.blit(
-            r_surf, (self.W // 2 - r_surf.get_width() // 2, card.y + 100)
-        )
-
-        self._draw_divider(card.y + 140, width=200)
-
-        trophy_font = _make_font("Segoe UI Symbol", 70)
-        trophy = "♛" if self.winner != "draw" else "♞"
-        t_surf = trophy_font.render(trophy, True, color)
-        self.surface.blit(
-            t_surf, (self.W // 2 - t_surf.get_width() // 2, card.y + 155)
-        )
-
-        for btn in self._buttons:
-            btn.draw(self.surface)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  PauseScreen
-# ══════════════════════════════════════════════════════════════════════════════
-
-class PauseScreen(BaseScreen):
-    """Màn hình tạm dừng, hiển thị lên trên game đang chơi."""
-
-    def __init__(self, surface: pygame.Surface) -> None:
-        super().__init__(surface)
-        cx, cy = self.W // 2, self.H // 2
-        btn_w, btn_h = 200, 46
-
-        self._buttons = [
-            Button(
-                pygame.Rect(cx - btn_w // 2, cy - 20, btn_w, btn_h),
-                "Tiếp tục", lambda: self._go_to("resume"),
-                color=C["brown_mid"], hover_color=C["brown_light"],
-            ),
-            Button(
-                pygame.Rect(cx - btn_w // 2, cy + 46, btn_w, btn_h),
-                "Menu chính", lambda: self._go_to("menu"),
-                color=C["brown_dark"], hover_color=C["brown_mid"],
-            ),
+        # Time control
+        self._tcs    = list(TIME_CONTROLS.keys())
+        self._tc_btns = [
+            ToggleButton(cx - 260 + i*107, 550, 102, 34, tc, self.sm)
+            for i, tc in enumerate(self._tcs)
         ]
+        self._tc_btns[4].selected = True   # ∞ default
+        self._sel_tc  = list(TIME_CONTROLS.keys())[4]
 
-    def draw(self) -> None:
-        # Không xóa màn hình – vẽ đè lên GameScreen
-        ov = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
-        ov.fill((0, 0, 0, 160))
-        self.surface.blit(ov, (0, 0))
+        self.btn_start = Button(cx-130, 622, 260, 50, "Start Game", self.med,
+                                color=(40,120,60), hover=(50,150,75), radius=12)
+        self.btn_quit  = Button(cx-80,  688, 160, 38, "Quit", self.reg,
+                                color=(80,30,30), hover=(110,40,40), radius=8)
+        self._next = None
 
-        self._draw_title("TẠM DỪNG", self.H // 2 - 100, size=52)
-        self._draw_divider(self.H // 2 - 35, width=180)
+    def handle_events(self, events):
+        for ev in events:
+            if ev.type == pygame.QUIT: pygame.quit(); sys.exit()
 
-        for btn in self._buttons:
-            btn.draw(self.surface)
+            for i, btn in enumerate(self._mode_btns):
+                if btn.handle_event(ev):
+                    for b in self._mode_btns: b.selected = False
+                    btn.selected = True
+                    self._sel_mode = self._modes[i][0]
 
+            for i, btn in enumerate(self._diff_btns):
+                if btn.handle_event(ev):
+                    for b in self._diff_btns: b.selected = False
+                    btn.selected = True
+                    self._sel_diff = self._diffs[i]
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  SettingsScreen
-# ══════════════════════════════════════════════════════════════════════════════
+            for i, btn in enumerate(self._tc_btns):
+                if btn.handle_event(ev):
+                    for b in self._tc_btns: b.selected = False
+                    btn.selected = True
+                    self._sel_tc = self._tcs[i]
 
-class SettingsScreen(BaseScreen):
-    """
-    Màn hình cài đặt: âm thanh, lật bàn cờ, chủ đề màu, độ khó AI.
-    """
+            if self.btn_start.handle_event(ev): self._next = "game"
+            if self.btn_quit.handle_event(ev):  pygame.quit(); sys.exit()
 
-    def __init__(self, surface: pygame.Surface) -> None:
-        super().__init__(surface)
-        self.settings: Dict[str, Any] = {
-            "sound":       True,
-            "flip_board":  False,
-            "ai_level":    2,      # 1-5
-            "show_hints":  True,
-            "theme":       "classic",
+        nxt = self._next; self._next = None
+        return nxt
+
+    def update(self): pass
+
+    def draw(self):
+        self.surf.fill(C_BG)
+        cx = WINDOW_WIDTH // 2
+
+        # Title
+        t = self.xl.render("Chess AI", True, C_ACCENT)
+        self.surf.blit(t, t.get_rect(centerx=cx, y=60))
+        #sub = self.reg.render("Minimax · Alpha-Beta · Piece-Square Tables · Fischer Clock", True, C_GREY)
+        #self.surf.blit(sub, sub.get_rect(centerx=cx, y=120))
+
+        # Section labels
+        for label, y in [("Game Mode", 190), ("Difficulty", 445), ("Time Control", 525)]:
+            lbl = self.reg.render(label, True, C_GREY)
+            self.surf.blit(lbl, (cx - lbl.get_width()//2, y))
+            pygame.draw.line(self.surf, (55,55,65),
+                             (cx-150, y+16), (cx+150, y+16))
+
+        for b in self._mode_btns: b.draw(self.surf)
+        for b in self._diff_btns: b.draw(self.surf)
+        for b in self._tc_btns:   b.draw(self.surf)
+        self.btn_start.draw(self.surf)
+        self.btn_quit.draw(self.surf)
+
+    @property
+    def config(self):
+        base, inc = TIME_CONTROLS[self._sel_tc]
+        return {
+            "mode":       self._sel_mode,
+            "difficulty": self._sel_diff,
+            "base_sec":   base,
+            "inc_sec":    inc,
         }
-        self._build_ui()
 
-    def _build_ui(self) -> None:
-        cx = self.W // 2
-        btn_w, btn_h = 200, 44
-        y = self.H // 2 - 80
 
-        toggle_defs = [
-            ("Âm thanh",       "sound"),
-            ("Lật bàn cờ",     "flip_board"),
-            ("Hiển thị gợi ý", "show_hints"),
-        ]
-        for label, key in toggle_defs:
-            k = key   # closure capture
-            self._buttons.append(
-                Button(
-                    pygame.Rect(cx - btn_w // 2, y, btn_w, btn_h),
-                    f"{label}: {'BẬT' if self.settings[k] else 'TẮT'}",
-                    on_click=lambda _k=k: self._toggle(_k),
-                    color=C["brown_mid"], hover_color=C["brown_light"],
-                    border_radius=8,
-                )
-            )
-            y += btn_h + 14
+# ══════════════════════════════════════════════════════════
+# GAME SCREEN
+# ══════════════════════════════════════════════════════════
+class GameScreen:
+    """
+    Handles all four game modes.
+    In AI-vs-AI, both sides are computed; the game advances
+    automatically after a short display delay.
+    """
 
-        # Nút quay lại
-        self._buttons.append(
-            Button(
-                pygame.Rect(cx - btn_w // 2, y + 20, btn_w, btn_h),
-                "← Quay lại", lambda: self._go_to("menu"),
-                color=C["brown_dark"], hover_color=C["brown_mid"],
-            )
+    _AI_VS_AI_DELAY = 0.5   # seconds between AI moves in spectator mode
+
+    def __init__(self, surf, config: dict):
+        self.surf   = surf
+        self.mode   = config["mode"]           # hvai / aivh / avsa / hvh
+        self.diff   = config["difficulty"]
+        base        = config["base_sec"]
+        inc         = config["inc_sec"]
+
+        self.sm, self.reg, self.med, self.big, self.xl = _fonts()
+
+        self.board_mgr = BoardManager(base, inc)
+        self._set_names()
+
+        # Engines
+        self._engine_black = ChessEngine(self.diff) if self.mode in ("hvai","avsa") else None
+        self._engine_white = ChessEngine(self.diff) if self.mode in ("aivh","avsa") else None
+
+        self.renderer   = Renderer(surf, self.reg, self.med)
+        self.eval_bar   = EvalBar(PNL_X, PNL_Y, BOARD_SIZE, self.sm)
+        self.cap_disp   = CapturedDisplay(PNL_X+24, PNL_Y+6, self.sm)
+        self.move_panel = MoveHistoryPanel(PNL_X+4, PNL_Y+50, PNL_W-8, 290, self.reg)
+
+        # Clocks
+        clk_w = (PNL_W-8)//2 - 2
+        self.clock_white = ClockDisplay(PNL_X+4, PNL_Y+352, clk_w, 62, self.med, self.sm,
+                                        C_WHITE, "White")
+        self.clock_black = ClockDisplay(PNL_X+clk_w+8, PNL_Y+352, clk_w, 62, self.med, self.sm,
+                                        C_WHITE, "Black")
+
+        # Sidebar buttons
+        by = PNL_Y + 428
+        hw = (PNL_W-12)//2
+        self.btn_undo = Button(PNL_X+4,      by,    hw,   34, "Undo",     self.reg)
+        self.btn_flip = Button(PNL_X+hw+8,   by,    hw,   34, "Flip",     self.reg)
+        self.btn_save = Button(PNL_X+4,      by+44, PNL_W-8,34,"Save PGN", self.reg)
+        self.btn_menu = Button(PNL_X+4,      by+88, PNL_W-8,34,"Main Menu",self.reg,
+                               color=(70,30,30), hover=(100,40,40))
+
+        # Interaction state
+        self.selected_sq  = None
+        self.legal_moves  = []
+        self.flipped      = (self.mode == "aivh")
+        self.dragging     = False
+        self.drag_piece   = None
+        self.drag_from    = None
+
+        # Promotion
+        self.promo_dialog = PromotionDialog(
+            BOARD_OFFSET_X + BOARD_SIZE//2,
+            BOARD_OFFSET_Y + BOARD_SIZE//2,
+            self.big)
+        self._pending_promo: chess.Move | None = None
+
+        # AI threading
+        self._ai_busy  = False
+        self._ai_move  = None
+        self._ai_score = 0
+        self._ai_info  = {}
+        self._ai_timer = 0.0   # for AI-vs-AI pacing
+
+        self._next = None
+        self._save_msg = ""
+        self._save_msg_t = 0.0
+
+        # Trigger AI if it moves first
+        self._maybe_trigger_ai()
+
+    def _set_names(self):
+        MODE_NAMES = {
+            "hvai": ("Player", "AI"),
+            "aivh": ("AI", "Player"),
+            "avsa": ("AI (White)", "AI (Black)"),
+            "hvh":  ("Player 1", "Player 2"),
+        }
+        w, b = MODE_NAMES.get(self.mode, ("White","Black"))
+        self.board_mgr.white_name = w
+        self.board_mgr.black_name = b
+
+    # ── AI helpers ────────────────────────────────────────
+    def _is_ai_turn(self) -> bool:
+        turn = self.board_mgr.turn
+        if self.mode == "avsa": return True
+        if self.mode == "hvai": return turn == chess.BLACK
+        if self.mode == "aivh": return turn == chess.WHITE
+        return False
+
+    def _engine_for_turn(self):
+        turn = self.board_mgr.turn
+        if turn == chess.WHITE: return self._engine_white
+        return self._engine_black
+
+    def _maybe_trigger_ai(self):
+        if self.board_mgr.is_game_over: return
+        if self._ai_busy: return
+        if not self._is_ai_turn(): return
+        eng = self._engine_for_turn()
+        if eng is None: return
+        self._ai_busy = True
+        board_copy = self.board_mgr.board.copy()
+        def _run():
+            move, score, info = eng.best_move(board_copy)
+            self._ai_move  = move
+            self._ai_score = score
+            self._ai_info  = info
+            self._ai_busy  = False
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _apply_ai_move(self):
+        if self._ai_move is None or self._ai_busy: return
+        move = self._ai_move
+        self._ai_move = None
+        if move and not self.board_mgr.is_game_over:
+            self.board_mgr.push_move(move)
+            self.eval_bar.update(self._ai_score)
+            if self.board_mgr.is_game_over:
+                self._next = "gameover"
+            else:
+                self._maybe_trigger_ai()
+
+    # ── Board click / drag ────────────────────────────────
+    def _is_human_turn(self) -> bool:
+        if self.mode == "avsa": return False
+        if self.mode == "hvh":  return True
+        turn = self.board_mgr.turn
+        if self.mode == "hvai": return turn == chess.WHITE
+        if self.mode == "aivh": return turn == chess.BLACK
+        return False
+
+    def _board_click(self, pos):
+        if not self._is_human_turn(): return
+        if self._ai_busy: return
+        sq = Renderer.px_to_sq(*pos, flipped=self.flipped)
+        if sq is None:
+            self.selected_sq = None; self.legal_moves = []; return
+
+        board = self.board_mgr.board
+
+        # Try to complete a move
+        if self.selected_sq is not None:
+            for move in self.legal_moves:
+                if move.to_square == sq:
+                    if move.promotion:
+                        # Need to pick piece
+                        self._pending_promo = chess.Move(move.from_square, sq)
+                        self.promo_dialog.show(board.turn)
+                        return
+                    self._push_human(move)
+                    return
+
+        # Select a piece
+        piece = board.piece_at(sq)
+        if piece and piece.color == board.turn:
+            self.selected_sq = sq
+            self.legal_moves = self.board_mgr.legal_moves_from(sq)
+        else:
+            self.selected_sq = None; self.legal_moves = []
+
+    def _push_human(self, move: chess.Move):
+        ok = self.board_mgr.push_move(move)
+        self.selected_sq = None; self.legal_moves = []
+        if ok:
+            self.eval_bar.update(self._ai_score)
+            if self.board_mgr.is_game_over:
+                self._next = "gameover"
+            else:
+                self._maybe_trigger_ai()
+
+    # ── Save PGN ──────────────────────────────────────────
+    def _save_pgn(self):
+        os.makedirs("data", exist_ok=True)
+        ts   = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        path = f"data/game_{ts}.pgn"
+        self.board_mgr.save_pgn(path)
+        self._save_msg   = f"Saved: {path}"
+        self._save_msg_t = time.perf_counter()
+
+    # ── Event handling ────────────────────────────────────
+    def handle_events(self, events):
+        for ev in events:
+            if ev.type == pygame.QUIT: pygame.quit(); sys.exit()
+
+            # Promotion dialog first
+            pt = self.promo_dialog.handle_event(ev)
+            if pt is not None and self._pending_promo is not None:
+                move = chess.Move(self._pending_promo.from_square,
+                                  self._pending_promo.to_square,
+                                  promotion=pt)
+                self._pending_promo = None
+                self._push_human(move)
+                continue
+
+            if self.btn_undo.handle_event(ev):
+                self.board_mgr.undo_move()
+                if self.mode in ("hvai","aivh"):
+                    self.board_mgr.undo_move()
+                self.selected_sq = None; self.legal_moves = []
+                self._ai_move = None
+            if self.btn_flip.handle_event(ev):
+                self.flipped = not self.flipped
+            if self.btn_save.handle_event(ev): self._save_pgn()
+            if self.btn_menu.handle_event(ev): self._next = "menu"
+
+            if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+                bx,by = BOARD_OFFSET_X, BOARD_OFFSET_Y
+                if bx <= ev.pos[0] < bx+BOARD_SIZE and by <= ev.pos[1] < by+BOARD_SIZE:
+                    self._board_click(ev.pos)
+
+        # Clock flag check
+        mgr = self.board_mgr
+        if not mgr.is_game_over:
+            if mgr.clock.is_flagged(chess.WHITE) or mgr.clock.is_flagged(chess.BLACK):
+                self._next = "gameover"
+
+        nxt = self._next; self._next = None
+        return nxt
+
+    def update(self):
+        # Apply ready AI move (with pacing for AI-vs-AI)
+        if not self._ai_busy and self._ai_move is not None:
+            if self.mode == "avsa":
+                if time.perf_counter() - self._ai_timer >= self._AI_VS_AI_DELAY:
+                    self._apply_ai_move()
+                    self._ai_timer = time.perf_counter()
+            else:
+                self._apply_ai_move()
+
+    # ── Draw ─────────────────────────────────────────────
+    def draw(self):
+        self.renderer.fill_bg()
+
+        mgr = self.board_mgr
+        self.renderer.draw_board(
+            mgr.board,
+            selected_sq = self.selected_sq,
+            legal_moves = self.legal_moves,
+            last_move   = mgr.last_move,
+            flipped     = self.flipped,
         )
+        self.renderer.draw_pieces(mgr.board, flipped=self.flipped)
+        self.renderer.draw_coords(self.flipped)
+        self.renderer.draw_border()
 
-    def _toggle(self, key: str) -> None:
-        self.settings[key] = not self.settings[key]
-        # Cập nhật nhãn nút
-        labels = {"sound": "Âm thanh", "flip_board": "Lật bàn cờ", "show_hints": "Hiển thị gợi ý"}
-        keys = ["sound", "flip_board", "show_hints"]
-        for i, k in enumerate(keys):
-            val = "BẬT" if self.settings[k] else "TẮT"
-            self._buttons[i].set_text(f"{labels[k]}: {val}")
+        # Side panel
+        self.renderer.draw_panel_bg(PNL_X-4, PNL_Y-4, PNL_W+8, BOARD_SIZE+8)
 
-    def draw(self) -> None:
-        self._draw_bg()
-        self._draw_title("CÀI ĐẶT", self.H // 6, size=48)
-        self._draw_divider(self.H // 6 + 70, width=200)
+        # Eval bar
+        self.eval_bar.draw(self.surf)
 
-        # Độ khó AI
-        ai_font = _make_font("Georgia", 18)
-        ai_txt = ai_font.render(
-            f"Độ khó AI: {'★' * self.settings['ai_level']}{'☆' * (5 - self.settings['ai_level'])}",
-            True, C["gold"],
-        )
-        self.surface.blit(
-            ai_txt, (self.W // 2 - ai_txt.get_width() // 2, self.H // 2 + 80)
-        )
+        # Captured pieces
+        self.cap_disp.draw(self.surf, mgr.captured_pieces)
 
-        for btn in self._buttons:
-            btn.draw(self.surface)
+        # Move history
+        self.move_panel.draw(self.surf, mgr.move_history_san())
+
+        # Clocks
+        clk = mgr.clock
+        self.clock_white.time_str = clk.fmt(chess.WHITE)
+        self.clock_white.active   = (mgr.turn == chess.WHITE and not mgr.is_game_over)
+        self.clock_white.flagged  = clk.is_flagged(chess.WHITE)
+        self.clock_black.time_str = clk.fmt(chess.BLACK)
+        self.clock_black.active   = (mgr.turn == chess.BLACK and not mgr.is_game_over)
+        self.clock_black.flagged  = clk.is_flagged(chess.BLACK)
+        self.clock_white.draw(self.surf)
+        self.clock_black.draw(self.surf)
+
+        # Buttons
+        self.btn_undo.draw(self.surf)
+        self.btn_flip.draw(self.surf)
+        self.btn_save.draw(self.surf)
+        self.btn_menu.draw(self.surf)
+
+        # AI thinking indicator
+        if self._ai_busy:
+            eng = self._engine_for_turn()
+            diff = eng.difficulty if eng else "?"
+            side = "White" if mgr.turn == chess.WHITE else "Black"
+            txt = f"⏳ {side} AI ({diff}) thinking…"
+            lbl = self.reg.render(txt, True, C_YELLOW)
+            self.surf.blit(lbl, (BOARD_OFFSET_X,
+                                 BOARD_OFFSET_Y + BOARD_SIZE + 6))
+
+        # Turn indicator (human modes)
+        elif not mgr.is_game_over and self._is_human_turn():
+            turn_str = "Your turn — " + ("White" if mgr.turn==chess.WHITE else "Black")
+            lbl = self.reg.render(turn_str, True, C_GREY)
+            self.surf.blit(lbl,(BOARD_OFFSET_X, BOARD_OFFSET_Y+BOARD_SIZE+6))
+
+        # Check warning
+        if mgr.is_in_check() and not mgr.is_game_over:
+            lbl = self.med.render("⚠ Check!", True, C_RED)
+            self.surf.blit(lbl,(BOARD_OFFSET_X + BOARD_SIZE//2 - lbl.get_width()//2,
+                                BOARD_OFFSET_Y - 28))
+
+        # Difficulty badge
+        diff_lbl = self.sm.render(f"AI: {self.diff}", True, C_GREY)
+        self.surf.blit(diff_lbl,(PNL_X+4, PNL_Y-20))
+
+        # Save message
+        if self._save_msg and time.perf_counter() - self._save_msg_t < 3.0:
+            lbl = self.sm.render(self._save_msg, True, C_GREEN)
+            self.surf.blit(lbl,(BOARD_OFFSET_X, BOARD_OFFSET_Y+BOARD_SIZE+24))
+
+        # Promotion dialog (on top of everything)
+        self.promo_dialog.draw(self.surf)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  Helpers
-# ══════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════
+# GAME OVER SCREEN
+# ══════════════════════════════════════════════════════════
+class GameOverScreen:
+    def __init__(self, surf, board_mgr: BoardManager, game_mode: str):
+        self.surf      = surf
+        self.board_mgr = board_mgr
+        self.mode      = game_mode
+        self.sm, self.reg, self.med, self.big, self.xl = _fonts()
 
-def _default_board() -> List[List[Optional[str]]]:
-    """Bàn cờ ban đầu theo chuẩn cờ vua (dùng để demo khi chưa có game_state)."""
-    b: List[List[Optional[str]]] = [[None] * 8 for _ in range(8)]
-    back = ["R", "N", "B", "Q", "K", "B", "N", "R"]
-    for c, p in enumerate(back):
-        b[0][c] = "b" + p
-        b[7][c] = "w" + p
-    for c in range(8):
-        b[1][c] = "bP"
-        b[6][c] = "wP"
-    return b
+        cx = WINDOW_WIDTH // 2
+        cy = WINDOW_HEIGHT // 2
+
+        self.btn_new  = Button(cx-140, cy+80, 130, 46, "New Game", self.med,
+                               color=(40,100,50), hover=(50,130,65))
+        self.btn_menu = Button(cx+10,  cy+80, 130, 46, "Menu",   self.med)
+        self.btn_save = Button(cx-65,  cy+140, 130, 38, "Save PGN", self.reg)
+
+        self._next       = None
+        self._saved      = False
+
+    def handle_events(self, events):
+        for ev in events:
+            if ev.type == pygame.QUIT: pygame.quit(); sys.exit()
+            if self.btn_new.handle_event(ev):  self._next = "game"
+            if self.btn_menu.handle_event(ev): self._next = "menu"
+            if self.btn_save.handle_event(ev):
+                os.makedirs("data", exist_ok=True)
+                ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                self.board_mgr.save_pgn(f"data/game_{ts}.pgn")
+                self._saved = True
+
+        nxt = self._next; self._next = None
+        return nxt
+
+    def update(self): pass
+
+    def draw(self):
+        self.surf.fill(C_BG)
+        cx = WINDOW_WIDTH//2; cy = WINDOW_HEIGHT//2
+
+        reason = self.board_mgr.game_over_reason()
+        result = self.board_mgr.result_with_flag()
+
+        RESULT_COLOR = {
+            "1-0": C_WHITE,  "0-1": C_GREY,  "1/2-1/2": C_YELLOW, "*": C_GREY,
+        }
+        # Decorative line
+        pygame.draw.line(self.surf, C_ACCENT,
+                         (cx-200, cy-120), (cx+200, cy-120), 2)
+
+        title = self.xl.render("Game Over", True, C_ACCENT)
+        self.surf.blit(title, title.get_rect(centerx=cx, y=cy-110))
+
+        rlbl = self.big.render(result, True, RESULT_COLOR.get(result, C_WHITE))
+        self.surf.blit(rlbl, rlbl.get_rect(centerx=cx, y=cy-50))
+
+        rlbl2 = self.med.render(reason, True, C_WHITE)
+        self.surf.blit(rlbl2, rlbl2.get_rect(centerx=cx, y=cy))
+
+        # Move count
+        n = len(self.board_mgr.move_history)
+        mlbl = self.reg.render(f"{(n+1)//2} moves played", True, C_GREY)
+        self.surf.blit(mlbl, mlbl.get_rect(centerx=cx, y=cy+36))
+
+        pygame.draw.line(self.surf, (55,55,65),
+                         (cx-200, cy+68), (cx+200, cy+68))
+
+        self.btn_new.draw(self.surf)
+        self.btn_menu.draw(self.surf)
+        self.btn_save.draw(self.surf)
+
+        if self._saved:
+            lbl = self.reg.render("PGN saved to /data/", True, C_GREEN)
+            self.surf.blit(lbl, lbl.get_rect(centerx=cx, y=cy+188))
