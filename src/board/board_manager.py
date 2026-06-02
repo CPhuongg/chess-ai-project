@@ -50,4 +50,4 @@ class BoardManager:
         if self.board.is_insufficient_material():
             print("HOA! Khong di quan de chieu het.")
             return True
-        return Falsen python-chess
+        return False 

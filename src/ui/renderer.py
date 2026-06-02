@@ -1,323 +1,160 @@
 """
-ui/renderer.py
-Chịu trách nhiệm vẽ bàn cờ, quân cờ, highlight ô, animation, và các hiệu ứng trực quan.
+renderer.py  –  All Pygame drawing: board, pieces, highlights, panel.
 """
 
+import os
 import pygame
-import math
-from typing import Optional, List, Tuple, Dict
-
-# ── Màu sắc (Dark Luxury Theme) ──────────────────────────────────────────────
-COLORS = {
-    "light_square":     (237, 220, 192),   # Ô sáng – kem ngà
-    "dark_square":      (101,  67,  33),   # Ô tối – nâu gỗ
-    "highlight":        (186, 202,  68, 180),  # Ô được chọn – xanh olive
-    "move_dot":         ( 40,  40,  40,  90),  # Chấm nước đi hợp lệ
-    "last_move_light":  (246, 246, 105, 160),  # Nước đi cuối – ô sáng
-    "last_move_dark":   (186, 202,  68, 160),  # Nước đi cuối – ô tối
-    "check":            (220,  50,  50, 200),  # Vua đang bị chiếu
-    "board_border":     ( 44,  27,   6),   # Viền bàn cờ
-    "coord_light":      (101,  67,  33),   # Chữ tọa độ trên ô sáng
-    "coord_dark":       (237, 220, 192),   # Chữ tọa độ trên ô tối
-    "background":       ( 26,  20,  14),   # Nền tổng thể
-    "shadow":           (  0,   0,   0, 120),
-}
-
-# Unicode quân cờ
-PIECE_UNICODE: Dict[str, str] = {
-    "wK": "♔", "wQ": "♕", "wR": "♖", "wB": "♗", "wN": "♘", "wP": "♙",
-    "bK": "♚", "bQ": "♛", "bR": "♜", "bB": "♝", "bN": "♞", "bP": "♟",
-}
+import chess
+from typing import Optional
+from src.engine.constants import (
+    BOARD_SIZE, SQUARE_SIZE, BOARD_OFFSET_X, BOARD_OFFSET_Y,
+    C_LIGHT, C_DARK, C_BG, C_PANEL, C_ACCENT, C_GREY, C_WHITE,
+    C_HL_SEL, C_HL_MOV, C_HL_CHK, C_DOT,
+    PIECE_SYMBOL, PIECE_UNICODE,
+)
 
 
-class ChessRenderer:
-    """
-    Vẽ toàn bộ bàn cờ và trạng thái game.
+class Renderer:
+    def __init__(self, surface, font_reg, font_bold, pieces_dir="assets/images/pieces"):
+        self.surf       = surface
+        self.fr         = font_reg
+        self.fb         = font_bold
+        self.pdir       = pieces_dir
+        self._imgs: dict = {}
+        self._fallback_font = None
+        self._load_pieces()
 
-    Parameters
-    ----------
-    surface   : pygame.Surface – bề mặt vẽ chính
-    board_rect: pygame.Rect    – vùng chứa bàn cờ (không kể viền)
-    flipped   : bool           – True → bàn cờ lật (góc nhìn đen)
-    """
+    # ── Asset loading ────────────────────────────────────
+    def _load_pieces(self):
+        for color, prefix in ((True,"w"),(False,"b")):
+            for pt, sym in PIECE_SYMBOL.items():
+                key  = f"{prefix}{sym}"
+                path = os.path.join(self.pdir, f"{key}.png")
+                if os.path.isfile(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    img = pygame.transform.smoothscale(img,(SQUARE_SIZE-10, SQUARE_SIZE-10))
+                    self._imgs[key] = img
+                else:
+                    self._imgs[key] = None
 
-    def __init__(
-        self,
-        surface: pygame.Surface,
-        board_rect: pygame.Rect,
-        flipped: bool = False,
-    ) -> None:
-        self.surface = surface
-        self.board_rect = board_rect
-        self.flipped = flipped
-        self.square_size = board_rect.width // 8
+    def _get_img(self, piece: chess.Piece):
+        key = ("w" if piece.color else "b") + PIECE_SYMBOL[piece.piece_type]
+        return self._imgs.get(key)
 
-        # Font chữ quân cờ & tọa độ
-        self._piece_font: Optional[pygame.font.Font] = None
-        self._coord_font: Optional[pygame.font.Font] = None
-        self._init_fonts()
+    def _fallback(self) -> pygame.font.Font:
+        if self._fallback_font is None:
+            self._fallback_font = pygame.font.SysFont(
+                "segoeuisymbol,symbola,dejavusans,freesans", SQUARE_SIZE - 12)
+        return self._fallback_font
 
-        # Trạng thái animation
-        self._anim_piece: Optional[str] = None   # e.g. "wQ"
-        self._anim_start: Optional[Tuple[int, int]] = None   # pixel
-        self._anim_end:   Optional[Tuple[int, int]] = None   # pixel
-        self._anim_t:     float = 0.0   # 0.0 → 1.0
-        self._anim_speed: float = 0.08  # tốc độ (tăng để nhanh hơn)
-
-        # Cache surface quân cờ
-        self._piece_surfaces: Dict[str, pygame.Surface] = {}
-
-    # ── Khởi tạo ─────────────────────────────────────────────────────────────
-
-    def _init_fonts(self) -> None:
-        """Tải font; fallback sang SysFont nếu không có file."""
-        size = int(self.square_size * 0.82)
-        coord_size = max(10, self.square_size // 6)
-        try:
-            self._piece_font = pygame.font.SysFont("Segoe UI Symbol", size)
-            self._coord_font = pygame.font.SysFont("Georgia", coord_size, bold=True)
-        except Exception:
-            self._piece_font = pygame.font.Font(None, size)
-            self._coord_font = pygame.font.Font(None, coord_size)
-
-    # ── Public API ────────────────────────────────────────────────────────────
-
-    def draw(
-        self,
-        board: List[List[Optional[str]]],
-        selected_sq: Optional[Tuple[int, int]] = None,
-        valid_moves: Optional[List[Tuple[int, int]]] = None,
-        last_move: Optional[Tuple[Tuple[int, int], Tuple[int, int]]] = None,
-        in_check_sq: Optional[Tuple[int, int]] = None,
-    ) -> None:
-        """
-        Vẽ toàn bộ bàn cờ một lần.
-
-        Parameters
-        ----------
-        board        : ma trận 8×8, mỗi ô None hoặc chuỗi như "wQ", "bK"…
-        selected_sq  : ô đang được chọn (row, col)
-        valid_moves  : danh sách ô có thể đi
-        last_move    : ((r0,c0),(r1,c1)) – nước đi vừa thực hiện
-        in_check_sq  : ô vua đang bị chiếu
-        """
-        self._draw_border()
-        self._draw_squares(selected_sq, valid_moves, last_move, in_check_sq)
-        self._draw_coordinates()
-        self._draw_pieces(board, skip_sq=self._anim_start if self._anim_piece else None)
-        if self.is_animating():
-            self._draw_animated_piece()
-
-    def start_move_animation(
-        self,
-        piece: str,
-        from_sq: Tuple[int, int],
-        to_sq: Tuple[int, int],
-    ) -> None:
-        """Bắt đầu animation di chuyển quân."""
-        self._anim_piece = piece
-        self._anim_start = self._sq_to_pixel(*from_sq)
-        self._anim_end   = self._sq_to_pixel(*to_sq)
-        self._anim_t = 0.0
-
-    def update_animation(self) -> bool:
-        """
-        Cập nhật tiến độ animation.
-        Trả về True khi animation vẫn đang chạy.
-        """
-        if not self.is_animating():
-            return False
-        self._anim_t = min(1.0, self._anim_t + self._anim_speed)
-        if self._anim_t >= 1.0:
-            self._anim_piece = None
-        return self._anim_piece is not None
-
-    def is_animating(self) -> bool:
-        return self._anim_piece is not None
-
-    def pixel_to_square(self, px: int, py: int) -> Optional[Tuple[int, int]]:
-        """Chuyển tọa độ pixel → (row, col) ô cờ; None nếu ngoài bàn."""
-        bx = px - self.board_rect.x
-        by = py - self.board_rect.y
-        if not (0 <= bx < self.board_rect.width and 0 <= by < self.board_rect.height):
-            return None
-        col = bx // self.square_size
-        row = by // self.square_size
-        if self.flipped:
-            row = 7 - row
-            col = 7 - col
-        return (row, col)
-
-    def set_flipped(self, flipped: bool) -> None:
-        self.flipped = flipped
-
-    # ── Vẽ nội bộ ────────────────────────────────────────────────────────────
-
-    def _draw_border(self) -> None:
-        border = 8
-        outer = self.board_rect.inflate(border * 2, border * 2)
-        pygame.draw.rect(self.surface, COLORS["board_border"], outer, border_radius=4)
-
-        # Đổ bóng nhẹ (vẽ nhiều rect mờ dần)
-        shadow_surf = pygame.Surface(
-            (outer.width + 12, outer.height + 12), pygame.SRCALPHA
-        )
-        for i in range(6):
-            alpha = 30 - i * 5
-            pygame.draw.rect(
-                shadow_surf,
-                (0, 0, 0, alpha),
-                shadow_surf.get_rect().inflate(-i * 2, -i * 2),
-                border_radius=4 + i,
-            )
-        self.surface.blit(shadow_surf, (outer.x - 6, outer.y - 6))
-
-    def _draw_squares(
-        self,
-        selected_sq, valid_moves, last_move, in_check_sq
-    ) -> None:
-        ss = self.square_size
-        for row in range(8):
-            for col in range(8):
-                x, y = self._sq_to_pixel(row, col)
-                is_light = (row + col) % 2 == 0
-                base_color = COLORS["light_square"] if is_light else COLORS["dark_square"]
-                pygame.draw.rect(self.surface, base_color, (x, y, ss, ss))
-
-                # Nước đi cuối
-                if last_move and ((row, col) == last_move[0] or (row, col) == last_move[1]):
-                    ov = pygame.Surface((ss, ss), pygame.SRCALPHA)
-                    c = COLORS["last_move_light"] if is_light else COLORS["last_move_dark"]
-                    ov.fill(c)
-                    self.surface.blit(ov, (x, y))
-
-                # Ô được chọn
-                if selected_sq and (row, col) == selected_sq:
-                    ov = pygame.Surface((ss, ss), pygame.SRCALPHA)
-                    ov.fill(COLORS["highlight"])
-                    self.surface.blit(ov, (x, y))
-
-                # Nước đi hợp lệ
-                if valid_moves and (row, col) in valid_moves:
-                    self._draw_move_dot(x, y, ss)
-
-                # Vua bị chiếu
-                if in_check_sq and (row, col) == in_check_sq:
-                    self._draw_check_glow(x, y, ss)
-
-    def _draw_move_dot(self, x: int, y: int, ss: int) -> None:
-        dot_surf = pygame.Surface((ss, ss), pygame.SRCALPHA)
-        cx, cy = ss // 2, ss // 2
-        r = ss // 7
-        pygame.draw.circle(dot_surf, COLORS["move_dot"], (cx, cy), r)
-        self.surface.blit(dot_surf, (x, y))
-
-    def _draw_check_glow(self, x: int, y: int, ss: int) -> None:
-        glow = pygame.Surface((ss, ss), pygame.SRCALPHA)
-        for radius in range(ss // 2, 0, -3):
-            alpha = max(0, 200 - radius * 6)
-            pygame.draw.circle(
-                glow, (*COLORS["check"][:3], alpha),
-                (ss // 2, ss // 2), radius,
-            )
-        self.surface.blit(glow, (x, y))
-
-    def _draw_coordinates(self) -> None:
-        ss = self.square_size
-        padding = 3
-        for i in range(8):
-            # Số hàng (1–8) – góc trái ô đầu cột
-            row = i if not self.flipped else 7 - i
-            rank_label = str(8 - row)
-            x, y = self._sq_to_pixel(row, 0)
-            is_light = (row + 0) % 2 == 0
-            color = COLORS["coord_light"] if is_light else COLORS["coord_dark"]
-            surf = self._coord_font.render(rank_label, True, color)
-            self.surface.blit(surf, (x + padding, y + padding))
-
-            # Chữ cột (a–h) – góc phải ô cuối hàng
-            col = i if not self.flipped else 7 - i
-            file_label = chr(ord("a") + col)
-            x2, y2 = self._sq_to_pixel(7, col)
-            is_light2 = (7 + col) % 2 == 0
-            color2 = COLORS["coord_light"] if is_light2 else COLORS["coord_dark"]
-            surf2 = self._coord_font.render(file_label, True, color2)
-            self.surface.blit(
-                surf2,
-                (x2 + ss - surf2.get_width() - padding, y2 + ss - surf2.get_height() - padding),
-            )
-
-    def _draw_pieces(
-        self,
-        board: List[List[Optional[str]]],
-        skip_sq: Optional[Tuple[int, int]] = None,
-    ) -> None:
-        ss = self.square_size
-        for row in range(8):
-            for col in range(8):
-                if skip_sq and (row, col) == skip_sq:
-                    continue
-                piece = board[row][col]
-                if piece:
-                    px, py = self._sq_to_pixel(row, col)
-                    self._blit_piece(piece, px, py, ss)
-
-    def _blit_piece(self, piece: str, px: int, py: int, ss: int) -> None:
-        if piece not in self._piece_surfaces:
-            self._piece_surfaces[piece] = self._render_piece_surface(piece, ss)
-        surf = self._piece_surfaces[piece]
-        ox = (ss - surf.get_width()) // 2
-        oy = (ss - surf.get_height()) // 2
-        # Đổ bóng nhẹ
-        shadow = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
-        shadow.fill((0, 0, 0, 0))
-        for dy in range(1, 4):
-            for dx in range(1, 4):
-                shadow_char = self._piece_font.render(
-                    PIECE_UNICODE.get(piece, "?"), True, (0, 0, 0, 60)
-                )
-                self.surface.blit(shadow_char, (px + ox + dx, py + oy + dy))
-        self.surface.blit(surf, (px + ox, py + oy))
-
-    def _render_piece_surface(self, piece: str, ss: int) -> pygame.Surface:
-        char = PIECE_UNICODE.get(piece, "?")
-        is_white = piece.startswith("w")
-        fg = (255, 252, 240) if is_white else (30, 20, 10)
-        outline = (80, 50, 20) if is_white else (230, 210, 180)
-        surf = self._piece_font.render(char, True, fg)
-        # Outline: render lại offset nhiều hướng
-        base = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
-        for dx in (-1, 0, 1):
-            for dy in (-1, 0, 1):
-                if dx or dy:
-                    o = self._piece_font.render(char, True, outline)
-                    base.blit(o, (dx, dy))
-        base.blit(surf, (0, 0))
-        return base
-
-    def _draw_animated_piece(self) -> None:
-        if not self._anim_piece or not self._anim_start or not self._anim_end:
-            return
-        t = self._ease_in_out(self._anim_t)
-        ax = self._anim_start[0] + (self._anim_end[0] - self._anim_start[0]) * t
-        ay = self._anim_start[1] + (self._anim_end[1] - self._anim_start[1]) * t
-        # Quỹ đạo hơi cong (parabola nhỏ)
-        arc = -self.square_size * 0.3 * math.sin(math.pi * self._anim_t)
-        ay += arc
-        ss = self.square_size
-        self._blit_piece(self._anim_piece, int(ax), int(ay - ss * 0.1), ss)
-
-    # ── Helpers ───────────────────────────────────────────────────────────────
-
-    def _sq_to_pixel(self, row: int, col: int) -> Tuple[int, int]:
-        ss = self.square_size
-        disp_row = (7 - row) if self.flipped else row
-        disp_col = (7 - col) if self.flipped else col
-        return (
-            self.board_rect.x + disp_col * ss,
-            self.board_rect.y + disp_row * ss,
-        )
+    # ── Coord helpers ────────────────────────────────────
+    @staticmethod
+    def sq_to_px(sq, flipped=False):
+        f = chess.square_file(sq); r = chess.square_rank(sq)
+        if flipped: f,r = 7-f, 7-r
+        x = BOARD_OFFSET_X + f * SQUARE_SIZE
+        y = BOARD_OFFSET_Y + (7-r) * SQUARE_SIZE
+        return x,y
 
     @staticmethod
-    def _ease_in_out(t: float) -> float:
-        return t * t * (3 - 2 * t)
+    def px_to_sq(px, py, flipped=False):
+        col = (px - BOARD_OFFSET_X) // SQUARE_SIZE
+        row = (py - BOARD_OFFSET_Y) // SQUARE_SIZE
+        if not (0<=col<8 and 0<=row<8): return None
+        f = col; r = 7-row
+        if flipped: f,r = 7-f, 7-r
+        return chess.square(f,r)
+
+    # ── Draw helpers ─────────────────────────────────────
+    def _fill_sq(self, sq, color, flipped):
+        x,y = self.sq_to_px(sq, flipped)
+        if len(color)==4:
+            s = pygame.Surface((SQUARE_SIZE,SQUARE_SIZE),pygame.SRCALPHA)
+            s.fill(color)
+            self.surf.blit(s,(x,y))
+        else:
+            pygame.draw.rect(self.surf,color,pygame.Rect(x,y,SQUARE_SIZE,SQUARE_SIZE))
+
+    # ── Public API ───────────────────────────────────────
+    def fill_bg(self):
+        self.surf.fill(C_BG)
+
+    def draw_panel_bg(self, x, y, w, h):
+        pygame.draw.rect(self.surf, C_PANEL, pygame.Rect(x,y,w,h), border_radius=12)
+
+    def draw_board(self, board, selected_sq=None, legal_moves=(), last_move=None, flipped=False):
+        for sq in chess.SQUARES:
+            f = chess.square_file(sq); r = chess.square_rank(sq)
+            base = C_LIGHT if (f+r)%2==0 else C_DARK
+            self._fill_sq(sq, base, flipped)
+
+            if last_move and sq in (last_move.from_square, last_move.to_square):
+                self._fill_sq(sq, C_HL_MOV, flipped)
+            if sq == selected_sq:
+                self._fill_sq(sq, C_HL_SEL, flipped)
+            if board.is_check() and sq == board.king(board.turn):
+                self._fill_sq(sq, C_HL_CHK, flipped)
+
+        # Legal move dots
+        for m in legal_moves:
+            sq = m.to_square
+            x,y = self.sq_to_px(sq, flipped)
+            s = pygame.Surface((SQUARE_SIZE,SQUARE_SIZE), pygame.SRCALPHA)
+            if board.piece_at(sq):
+                pygame.draw.circle(s, C_DOT,(SQUARE_SIZE//2,SQUARE_SIZE//2),
+                                   SQUARE_SIZE//2-2,4)
+            else:
+                pygame.draw.circle(s, C_DOT,(SQUARE_SIZE//2,SQUARE_SIZE//2),
+                                   SQUARE_SIZE//7)
+            self.surf.blit(s,(x,y))
+
+    def draw_pieces(self, board, flipped=False, skip_sq=None):
+        for sq in chess.SQUARES:
+            if sq == skip_sq: continue
+            piece = board.piece_at(sq)
+            if piece is None: continue
+            x,y = self.sq_to_px(sq, flipped)
+            img = self._get_img(piece)
+            if img:
+                self.surf.blit(img,(x+5,y+5))
+            else:
+                sym = PIECE_UNICODE.get((piece.piece_type, piece.color),"?")
+                tc  = (250,250,250) if piece.color==chess.WHITE else (20,20,20)
+                lbl = self._fallback().render(sym, True, tc)
+                self.surf.blit(lbl,(x+(SQUARE_SIZE-lbl.get_width())//2,
+                                    y+(SQUARE_SIZE-lbl.get_height())//2))
+
+    def draw_dragged(self, piece, pos):
+        img = self._get_img(piece)
+        if img:
+            self.surf.blit(img,(pos[0]-img.get_width()//2, pos[1]-img.get_height()//2))
+        else:
+            sym = PIECE_UNICODE.get((piece.piece_type, piece.color),"?")
+            tc  = (250,250,250) if piece.color==chess.WHITE else (20,20,20)
+            lbl = self._fallback().render(sym, True, tc)
+            self.surf.blit(lbl,(pos[0]-lbl.get_width()//2, pos[1]-lbl.get_height()//2))
+
+    def draw_coords(self, flipped=False):
+        files = "abcdefgh"
+        for i in range(8):
+            fc = files[i if not flipped else 7-i]
+            rn = str(i+1 if not flipped else 8-i)
+            # file labels bottom
+            lbl = self.fr.render(fc, True, C_GREY)
+            self.surf.blit(lbl,(BOARD_OFFSET_X + i*SQUARE_SIZE + SQUARE_SIZE//2 - lbl.get_width()//2,
+                                BOARD_OFFSET_Y + BOARD_SIZE + 4))
+            # rank labels left
+            lbl = self.fr.render(rn, True, C_GREY)
+            self.surf.blit(lbl,(BOARD_OFFSET_X - lbl.get_width() - 5,
+                                BOARD_OFFSET_Y + (7-i)*SQUARE_SIZE + SQUARE_SIZE//2 - lbl.get_height()//2))
+
+    def draw_border(self):
+        r = pygame.Rect(BOARD_OFFSET_X-2, BOARD_OFFSET_Y-2, BOARD_SIZE+4, BOARD_SIZE+4)
+        pygame.draw.rect(self.surf, C_ACCENT, r, 2, border_radius=4)
+
+    def draw_text(self, text, x, y, font=None, color=None):
+        f = font or self.fr
+        c = color or C_WHITE
+        lbl = f.render(text, True, c)
+        self.surf.blit(lbl,(x,y))
+        return lbl.get_width()
