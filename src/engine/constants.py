@@ -100,7 +100,7 @@ TIME_CONTROLS = {
     "3+2  (Blitz)":    (180,  2),
     "5+3  (Blitz)":    (300,  3),
     "10+5 (Rapid)":    (600,  5),
-    "∞  (No limit)":   (0,    0),
+    "No limit":   (0,    0),
 }
 
 # ── Search parameters ────────────────────────────────────
