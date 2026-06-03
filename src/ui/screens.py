@@ -22,6 +22,7 @@ from src.engine.constants    import (
     DIFFICULTY, TIME_CONTROLS,
 )
 from src.ui.renderer   import Renderer
+from src.ui.animation  import AnimationManager
 from src.ui.components import (
     Button, ToggleButton, EvalBar, ClockDisplay,
     CapturedDisplay, MoveHistoryPanel, PromotionDialog,
@@ -87,7 +88,7 @@ class MainMenuScreen:
             ToggleButton(cx - 260 + i*107, 550, 102, 34, tc, self.sm)
             for i, tc in enumerate(self._tcs)
         ]
-        self._tc_btns[4].selected = True   # ∞ default
+        self._tc_btns[4].selected = True   # No limit default
         self._sel_tc  = list(TIME_CONTROLS.keys())[4]
 
         self.btn_start = Button(cx-130, 622, 260, 50, "Start Game", self.med,
@@ -131,9 +132,28 @@ class MainMenuScreen:
         cx = WINDOW_WIDTH // 2
 
         # Title
-        t = self.xl.render("Chess AI", True, C_ACCENT)
-        self.surf.blit(t, t.get_rect(centerx=cx, y=60))
-        #sub = self.reg.render("Minimax · Alpha-Beta · Piece-Square Tables · Fischer Clock", True, C_GREY)
+        # Title: render chess king as separate surface using unicode font if available
+        title_text = "Chess AI"
+        t = self.xl.render(title_text, True, C_ACCENT)
+        # Try to draw a chess piece icon before the title
+        piece_drawn = False
+        """
+        try:
+            uf = pygame.font.SysFont("segoeuisymbol,seguisym,dejavusans,freesans", 50)
+            piece = uf.render("K", True, C_ACCENT)
+            if piece.get_width() > 5:
+                total_w = piece.get_width() + 12 + t.get_width()
+                px = cx - total_w // 2
+                self.surf.blit(piece, piece.get_rect(y=62, x=px))
+                self.surf.blit(t, t.get_rect(y=60, x=px + piece.get_width() + 12))
+                #piece_drawn = True
+        except Exception:
+            pass
+        """
+        if not piece_drawn:
+            self.surf.blit(t, t.get_rect(centerx=cx, y=60))
+        
+        #sub = self.reg.render("Minimax  |  Alpha-Beta  |  Piece-Square Tables  |  Fischer Clock", True, C_GREY)
         #self.surf.blit(sub, sub.get_rect(centerx=cx, y=120))
 
         # Section labels
@@ -189,9 +209,11 @@ class GameScreen:
         self._engine_white = ChessEngine(self.diff) if self.mode in ("aivh","avsa") else None
 
         self.renderer   = Renderer(surf, self.reg, self.med)
-        self.eval_bar   = EvalBar(PNL_X, PNL_Y, BOARD_SIZE, self.sm)
-        self.cap_disp   = CapturedDisplay(PNL_X+24, PNL_Y+6, self.sm)
-        self.move_panel = MoveHistoryPanel(PNL_X+4, PNL_Y+50, PNL_W-8, 290, self.reg)
+        # EvalBar sits in the 28px gap between board right edge and side panel
+        EVAL_X = BOARD_OFFSET_X + BOARD_SIZE + 4
+        self.eval_bar   = EvalBar(EVAL_X, PNL_Y, BOARD_SIZE, self.sm, width=20)
+        self.cap_disp   = CapturedDisplay(PNL_X+8, PNL_Y+6, self.sm)
+        self.move_panel = MoveHistoryPanel(PNL_X+4, PNL_Y+50, PNL_W-8, 285, self.reg)
 
         # Clocks
         clk_w = (PNL_W-8)//2 - 2
@@ -223,6 +245,9 @@ class GameScreen:
             BOARD_OFFSET_Y + BOARD_SIZE//2,
             self.big)
         self._pending_promo: chess.Move | None = None
+
+        # Animation
+        self.anim = AnimationManager()
 
         # AI threading
         self._ai_busy  = False
@@ -283,7 +308,17 @@ class GameScreen:
         move = self._ai_move
         self._ai_move = None
         if move and not self.board_mgr.is_game_over:
+            board        = self.board_mgr.board
+            moving_piece = board.piece_at(move.from_square)
+            cap_sq       = move.to_square
+            if board.is_en_passant(move):
+                ep_rank = 4 if board.turn == chess.WHITE else 3
+                cap_sq  = chess.square(chess.square_file(move.to_square), ep_rank)
+            captured = board.piece_at(cap_sq)
             self.board_mgr.push_move(move)
+            if moving_piece:
+                self.anim.trigger_ai_move(move, moving_piece, captured,
+                                          flipped=self.flipped)
             self.eval_bar.update(self._ai_score)
             if self.board_mgr.is_game_over:
                 self._next = "gameover"
@@ -329,9 +364,21 @@ class GameScreen:
             self.selected_sq = None; self.legal_moves = []
 
     def _push_human(self, move: chess.Move):
+        # Grab piece info BEFORE pushing
+        board        = self.board_mgr.board
+        moving_piece = board.piece_at(move.from_square)
+        cap_sq       = move.to_square
+        if board.is_en_passant(move):
+            ep_rank  = 4 if board.turn == chess.WHITE else 3
+            cap_sq   = chess.square(chess.square_file(move.to_square), ep_rank)
+        captured     = board.piece_at(cap_sq)
+
         ok = self.board_mgr.push_move(move)
         self.selected_sq = None; self.legal_moves = []
-        if ok:
+        self.anim.drag.stop()
+        if ok and moving_piece:
+            self.anim.trigger_move(move, moving_piece, captured,
+                                   flipped=self.flipped)
             self.eval_bar.update(self._ai_score)
             if self.board_mgr.is_game_over:
                 self._next = "gameover"
@@ -370,13 +417,45 @@ class GameScreen:
                 self._ai_move = None
             if self.btn_flip.handle_event(ev):
                 self.flipped = not self.flipped
+                self.anim.update_flipped(self.flipped)
             if self.btn_save.handle_event(ev): self._save_pgn()
             if self.btn_menu.handle_event(ev): self._next = "menu"
 
+            # Mouse wheel for move history scroll
+            self.move_panel.handle_event(ev)
+
             if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
-                bx,by = BOARD_OFFSET_X, BOARD_OFFSET_Y
+                bx, by = BOARD_OFFSET_X, BOARD_OFFSET_Y
                 if bx <= ev.pos[0] < bx+BOARD_SIZE and by <= ev.pos[1] < by+BOARD_SIZE:
                     self._board_click(ev.pos)
+                    # Start drag if a piece got selected
+                    if self.selected_sq is not None and self._is_human_turn():
+                        piece = self.board_mgr.board.piece_at(self.selected_sq)
+                        if piece:
+                            self.anim.drag.start(piece, self.selected_sq, ev.pos)
+
+            if ev.type == pygame.MOUSEMOTION:
+                if self.anim.drag.active:
+                    self.anim.drag.move(ev.pos)
+
+            if ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
+                if self.anim.drag.active:
+                    bx, by = BOARD_OFFSET_X, BOARD_OFFSET_Y
+                    if bx <= ev.pos[0] < bx+BOARD_SIZE and by <= ev.pos[1] < by+BOARD_SIZE:
+                        drop_sq = self.renderer.px_to_sq(*ev.pos, flipped=self.flipped)
+                        if drop_sq is not None and self.selected_sq is not None:
+                            for move in self.legal_moves:
+                                if move.to_square == drop_sq:
+                                    if move.promotion and move.promotion != chess.QUEEN:
+                                        continue
+                                    self._push_human(move)
+                                    break
+                            else:
+                                self.anim.drag.stop()
+                    else:
+                        self.anim.drag.stop()
+                        self.selected_sq = None
+                        self.legal_moves = []
 
         # Clock flag check
         mgr = self.board_mgr
@@ -409,7 +488,30 @@ class GameScreen:
             last_move   = mgr.last_move,
             flipped     = self.flipped,
         )
-        self.renderer.draw_pieces(mgr.board, flipped=self.flipped)
+        # Determine which squares to skip (being animated or dragged)
+        skip_sqs = set()
+        if self.anim.slide_src is not None:  skip_sqs.add(self.anim.slide_src)
+        if self.anim.slide_dst is not None:  skip_sqs.add(self.anim.slide_dst)
+        if self.anim.drag.active and self.anim.drag.from_sq is not None:
+            skip_sqs.add(self.anim.drag.from_sq)
+
+        # Draw static pieces (skip animated ones)
+        for sq in chess.SQUARES:
+            if sq in skip_sqs: continue
+            piece = mgr.board.piece_at(sq)
+            if piece:
+                self.renderer._draw_one_piece(
+                    piece, sq, self.flipped, self.renderer._piece_font())
+
+        # Capture pop (behind slide)
+        self.anim.draw_captures(self.surf, self.renderer)
+
+        # Sliding piece
+        self.anim.draw_slides(self.surf, self.renderer)
+
+        # Dragged piece (topmost layer)
+        self.anim.draw_drag(self.surf, self.renderer)
+
         self.renderer.draw_coords(self.flipped)
         self.renderer.draw_border()
 
@@ -447,7 +549,7 @@ class GameScreen:
             eng = self._engine_for_turn()
             diff = eng.difficulty if eng else "?"
             side = "White" if mgr.turn == chess.WHITE else "Black"
-            txt = f"⏳ {side} AI ({diff}) thinking…"
+            txt = f"{side} AI ({diff}) thinking..."
             lbl = self.reg.render(txt, True, C_YELLOW)
             self.surf.blit(lbl, (BOARD_OFFSET_X,
                                  BOARD_OFFSET_Y + BOARD_SIZE + 6))
@@ -460,7 +562,7 @@ class GameScreen:
 
         # Check warning
         if mgr.is_in_check() and not mgr.is_game_over:
-            lbl = self.med.render("⚠ Check!", True, C_RED)
+            lbl = self.med.render("CHECK!", True, C_RED)
             self.surf.blit(lbl,(BOARD_OFFSET_X + BOARD_SIZE//2 - lbl.get_width()//2,
                                 BOARD_OFFSET_Y - 28))
 
