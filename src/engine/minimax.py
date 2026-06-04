@@ -1,139 +1,113 @@
-"""
-minimax.py  –  Negamax + Alpha-Beta pruning + Quiescence search.
-Supports per-difficulty depth and soft time limits.
-"""
-
 import chess
 import time
-from typing import Optional
-from src.engine.evaluation import evaluate
-from src.engine.constants import (
-    INFINITY, CHECKMATE_SCORE, DEFAULT_DEPTH, QUIESCENCE_DEPTH,
-    DIFFICULTY,
-)
-
-_PV = {chess.PAWN:100, chess.KNIGHT:320, chess.BISHOP:330,
-       chess.ROOK:500, chess.QUEEN:900, chess.KING:20000}
-
-
-def _mvv_lva(board: chess.Board, move: chess.Move) -> int:
-    if not board.is_capture(move):
-        return 0
-    victim   = board.piece_at(move.to_square)
-    attacker = board.piece_at(move.from_square)
-    v = _PV.get(victim.piece_type,   0) if victim   else 0
-    a = _PV.get(attacker.piece_type, 0) if attacker else 0
-    return v * 10 - a
-
-
-def _order(board: chess.Board, moves) -> list:
-    def key(m):
-        s = _mvv_lva(board, m)
-        if m.promotion: s += _PV.get(m.promotion, 0)
-        if board.gives_check(m): s += 60
-        return s
-    return sorted(moves, key=key, reverse=True)
-
-
-def _quiescence(board, alpha, beta, depth):
-    # Đã sửa: Quy điểm số về góc nhìn của phe đang đến lượt
-    stand_pat = evaluate(board) * (1 if board.turn == chess.WHITE else -1)
-    
-    if depth == 0:         return stand_pat
-    if stand_pat >= beta:  return beta
-    if stand_pat > alpha:  alpha = stand_pat
-    
-    # Tối ưu: Dùng generate_legal_captures() để lấy danh sách nước bắt quân nhanh hơn
-    captures = list(board.generate_legal_captures())
-    for move in _order(board, captures):
-        board.push(move)
-        score = -_quiescence(board, -beta, -alpha, depth - 1)
-        board.pop()
-        if score >= beta:  return beta
-        if score > alpha:  alpha = score
-    return alpha
-
-
-def _negamax(board, depth, alpha, beta, stats, deadline):
-    stats["nodes"] += 1
-    if board.is_game_over():
-        score = evaluate(board)
-        # Đã sửa: Trừ đi độ sâu (depth) vào điểm chiếu bí để bot chọn đường ngắn nhất
-        if abs(score) >= CHECKMATE_SCORE:
-            score = score + depth if score > 0 else score - depth
-        return score * (1 if board.turn == chess.WHITE else -1)
-        
-    if depth == 0:
-        return _quiescence(board, alpha, beta, QUIESCENCE_DEPTH)
-
-    for move in _order(board, board.legal_moves):
-        if deadline and time.perf_counter() > deadline:
-            break
-        board.push(move)
-        score = -_negamax(board, depth - 1, -beta, -alpha, stats, deadline)
-        board.pop()
-        if score > alpha: alpha = score
-        if alpha >= beta:
-            stats["cutoffs"] += 1
-            break
-    return alpha
-
+from src.engine.nnue_evaluation import HybridEvaluation
 
 class ChessEngine:
-    """
-    Public engine API.
+    def __init__(self, depth, use_opening_book=True):
+        # Xử lý depth nếu là string (từ UI)
+        if isinstance(depth, str):
+            depth_map = {"Easy": 2, "Medium": 3, "Hard": 4, "Expert": 5}
+            depth = depth_map.get(depth, 3)
+        self.depth = int(depth)
+        self.difficulty = self._depth_to_difficulty(self.depth)
+        self.evaluator = HybridEvaluation(nnue_weight=0.7)
+        self.nodes_searched = 0
+        self.use_opening_book = use_opening_book
+        self.opening_book = None
 
-    Parameters
-    ----------
-    difficulty : "Easy" | "Medium" | "Hard" | "Expert"
-    depth      : override depth (ignores difficulty)
-    """
+    def _depth_to_difficulty(self, depth):
+        if depth <= 2: return "Easy"
+        elif depth <= 3: return "Medium"
+        elif depth <= 4: return "Hard"
+        else: return "Expert"
 
-    def __init__(self, difficulty: str = "Medium", depth: int = None):
-        cfg         = DIFFICULTY.get(difficulty, DIFFICULTY["Medium"])
-        self.depth  = depth if depth is not None else cfg["depth"]
-        self.tl     = cfg["time_limit"]
-        self.difficulty = difficulty
+    def set_difficulty(self, depth):
+        self.depth = max(1, min(int(depth), 5))
+        self.difficulty = self._depth_to_difficulty(self.depth)
 
-    def best_move(
-        self,
-        board: chess.Board,
-        time_limit: Optional[float] = None,
-    ) -> tuple:
-        """Return (move, white_score_cp, info_dict)."""
+    def order_moves(self, board, moves):
+        move_scores = []
+        for move in moves:
+            score = 0
+            if board.is_capture(move):
+                victim = board.piece_at(move.to_square)
+                if victim:
+                    attacker = board.piece_at(move.from_square)
+                    if attacker:
+                        score = 10 * victim.piece_type - attacker.piece_type
+            if move.promotion:
+                score += 800
+            move_scores.append((move, score))
+        move_scores.sort(key=lambda x: x[1], reverse=True)
+        return [move for move, _ in move_scores]
+
+    def minimax(self, board, depth, alpha, beta, maximizing):
+        self.nodes_searched += 1
         if board.is_game_over():
-            return None, evaluate(board), {}
+            if board.is_checkmate():
+                return -10000 if maximizing else 10000
+            return 0
+        if depth == 0:
+            return self.evaluator.evaluate(board)
 
-        limit    = time_limit if time_limit is not None else self.tl
-        deadline = time.perf_counter() + limit if limit else None
-        stats    = {"nodes": 0, "cutoffs": 0}
-        start    = time.perf_counter()
+        moves = self.order_moves(board, list(board.legal_moves))
+        if maximizing:
+            max_eval = float('-inf')
+            for move in moves:
+                board.push(move)
+                eval = self.minimax(board, depth-1, alpha, beta, False)
+                board.pop()
+                max_eval = max(max_eval, eval)
+                alpha = max(alpha, eval)
+                if beta <= alpha:
+                    break
+            return max_eval
+        else:
+            min_eval = float('inf')
+            for move in moves:
+                board.push(move)
+                eval = self.minimax(board, depth-1, alpha, beta, True)
+                board.pop()
+                min_eval = min(min_eval, eval)
+                beta = min(beta, eval)
+                if beta <= alpha:
+                    break
+            return min_eval
 
-        best_move  = None
-        best_score = -INFINITY
-        alpha      = -INFINITY
+    def get_best_move(self, board, time_limit=5.0):
+        self.nodes_searched = 0
+        start_time = time.time()
+        best_move = None
+        best_score = float('-inf')
 
-        for move in _order(board, board.legal_moves):
-            board.push(move)
-            score = -_negamax(board, self.depth - 1, -INFINITY, -alpha, stats, deadline)
-            board.pop()
-            if score > best_score:
-                best_score = score
-                best_move  = move
-            if score > alpha:
-                alpha = score
-            if deadline and time.perf_counter() > deadline:
+        for current_depth in range(1, self.depth + 1):
+            if time.time() - start_time > time_limit:
                 break
+            current_best_move = None
+            current_best_score = float('-inf')
+            alpha = float('-inf')
+            beta = float('inf')
+            moves = self.order_moves(board, list(board.legal_moves))
+            for move in moves:
+                board.push(move)
+                score = self.minimax(board, current_depth-1, alpha, beta, False)
+                board.pop()
+                if score > current_best_score:
+                    current_best_score = score
+                    current_best_move = move
+                alpha = max(alpha, score)
+            if current_best_move:
+                best_move = current_best_move
+                best_score = current_best_score
+        return best_move
 
-        elapsed     = time.perf_counter() - start
-        white_score = best_score if board.turn == chess.WHITE else -best_score
-        info = {
-            "depth":     self.depth,
-            "nodes":     stats["nodes"],
-            "cutoffs":   stats["cutoffs"],
-            "time_ms":   round(elapsed * 1000, 1),
-            "score_cp":  white_score,
-            "best_move": best_move.uci() if best_move else None,
-            "difficulty":self.difficulty,
-        }
-        return best_move, white_score, info
+    def best_move(self, board, time_limit=2.0):
+        """Giao diện tương thích với UI cũ (trả về tuple)"""
+        move = self.get_best_move(board, time_limit)
+        score = 0
+        if move:
+            board.push(move)
+            score = self.evaluator.evaluate(board)
+            board.pop()
+        info = {"nodes": self.nodes_searched, "depth": self.depth}
+        return move, score, info

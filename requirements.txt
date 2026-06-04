@@ -1,2 +1,6 @@
-chess
-pygame
+# requirements.txt
+python-chess>=1.999.0
+pygame>=2.5.0
+numpy>=1.24.0
+torch>=2.0.0  # Cho mạng nơ-ron
+requests>=2.31.0  # Cho Lichess bot (chuẩn bị cho giai đoạn sau)
