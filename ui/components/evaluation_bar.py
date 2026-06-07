@@ -10,8 +10,8 @@ from PyQt5.QtGui import QPainter, QColor, QBrush, QPen, QFont
 # ── Palette ────────────────────────────────────────────────────────────────
 BG_DARK    = "#1A1A1A"
 PANEL_BG   = "#242424"
-ACCENT_WHITE = "#F0D9B5"   # Màu cho lợi thế Trắng
-ACCENT_BLACK = "#B58863"   # Màu cho lợi thế Đen
+ACCENT_WHITE = "#FFFFFF"   # Màu cho lợi thế Trắng
+ACCENT_BLACK = "#000000"   # Màu cho lợi thế Đen
 TEXT_MAIN  = "#EFEFEF"
 TEXT_DIM   = "#888888"
 _MONO      = "'Courier New', monospace"
@@ -31,7 +31,7 @@ class EvaluationBar(QWidget):
         self.setMinimumHeight(200)
 
         self._value = 0.0  # -10..+10
-        self._white_percent = 0.5  # 0..1
+        self._black_percent = 0.5  # 0..1 (phần Đen từ trên xuống)
 
         # Layout chứa label và thanh vẽ
         layout = QVBoxLayout(self)
@@ -71,9 +71,10 @@ class EvaluationBar(QWidget):
         """
         # Giới hạn trong khoảng [-10, 10]
         self._value = max(-10.0, min(10.0, value))
-        # Chuyển sang tỷ lệ % cho Trắng (0..1)
-        # value = +10 -> 100% trắng, value = -10 -> 0% trắng
-        self._white_percent = (self._value + 10.0) / 20.0
+        # Chuyển sang tỷ lệ % cho Đen (0..1) từ trên xuống
+        # value = +10 (lợi Trắng tối đa) -> 0% Đen (toàn Trắng)
+        # value = -10 (lợi Đen tối đa) -> 100% Đen (toàn Đen)
+        self._black_percent = (-self._value + 10.0) / 20.0
         self.value_label.setText(f"{self._value:+.2f}")
         self.bar_widget.update()
 
@@ -82,7 +83,7 @@ class EvaluationBar(QWidget):
 
 
 class _BarWidget(QWidget):
-    """Widget vẽ thanh ngang (thực chất là dọc) mô phỏng nhiệt độ."""
+    """Widget vẽ thanh dọc: phía trên = Đen, phía dưới = Trắng."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -97,29 +98,29 @@ class _BarWidget(QWidget):
         if h <= 0:
             return
 
-        # Lấy tỷ lệ từ EvaluationBar
+        # Lấy tỷ lệ Đen từ EvaluationBar
         eval_bar = self.parent()
         if isinstance(eval_bar, EvaluationBar):
-            white_ratio = eval_bar._white_percent
+            black_ratio = eval_bar._black_percent
         else:
-            white_ratio = 0.5
+            black_ratio = 0.5
 
-        # Chiều cao phần Trắng (từ trên xuống)
-        white_height = int(h * white_ratio)
+        # Chiều cao phần Đen (từ trên xuống)
+        black_height = int(h * black_ratio)
 
         # Vẽ nền tối
         painter.fillRect(0, 0, w, h, QColor(BG_DARK))
 
-        # Vẽ phần Trắng (phía trên)
-        if white_height > 0:
-            painter.fillRect(0, 0, w, white_height, QColor(ACCENT_WHITE))
-        # Vẽ phần Đen (phía dưới)
-        if white_height < h:
-            painter.fillRect(0, white_height, w, h - white_height, QColor(ACCENT_BLACK))
+        # Vẽ phần Đen (phía trên)
+        if black_height > 0:
+            painter.fillRect(0, 0, w, black_height, QColor(ACCENT_BLACK))
+        # Vẽ phần Trắng (phía dưới)
+        if black_height < h:
+            painter.fillRect(0, black_height, w, h - black_height, QColor(ACCENT_WHITE))
 
         # Vẽ đường kẻ phân cách
         painter.setPen(QPen(QColor("#FFFFFF"), 1))
-        painter.drawLine(0, white_height, w, white_height)
+        painter.drawLine(0, black_height, w, black_height)
 
         # Vẽ viền
         painter.setPen(QPen(QColor("#383838"), 1))

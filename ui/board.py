@@ -30,10 +30,12 @@ from ui.components.history import MoveHistoryWidget
 from ui.components.sidebar import AIControlPanel, SavedGameManager
 from ui.components.popups import PawnPromotionDialog, GameOverPopup, SaveGameDialog
 from ui.components.animations import AnimatedLabel
+from ui.components.evaluation_bar import EvaluationBar
 # from ui.workers.ai_worker import AIWorker
 from ui.workers.ai_worker import ResponsiveAIManager
 from ui.components.chess_timer import ChessTimer
 from ui.components.time_mode_dialog import TimeModeDialog
+from evaluation.evaluation import Evaluation
 
 def exception_hook(exctype, value, tb):
     print(f"Ngoại lệ không được xử lý: {exctype}")
@@ -76,6 +78,7 @@ class ChessBoard(QMainWindow):
         
         self.board = chess.Board()
         self.selected_square = None
+        self._evaluator = Evaluation()   # dùng để tính thanh lượng giá
         
         # Initialize chess bots ONCE here
         from bot import ChessBot
@@ -145,7 +148,14 @@ class ChessBoard(QMainWindow):
             }
         """)
         board_layout = QVBoxLayout(board_container)
-        
+
+        # ── Evaluation bar + board side by side ──────────────────────────
+        board_row = QHBoxLayout()
+        board_row.setSpacing(6)
+
+        self.eval_bar = EvaluationBar()
+        board_row.addWidget(self.eval_bar)
+
         # Create board widget with fixed size
         board_widget = QWidget()
         board_widget.setStyleSheet("background-color: #455a64; padding: 5px; border-radius: 5px;")
@@ -195,7 +205,8 @@ class ChessBoard(QMainWindow):
                 row.append(square)
             self.squares.append(row)
 
-        board_layout.addWidget(board_widget)
+        board_row.addWidget(board_widget)
+        board_layout.addLayout(board_row)
 
         # Create thinking indicator
         indicator_space = QWidget()
@@ -1174,8 +1185,34 @@ class ChessBoard(QMainWindow):
                 
         return valid_moves, castling_moves
 
+    def _refresh_eval_and_captured(self):
+        """Cập nhật thanh lượng giá và danh sách quân đã bị ăn."""
+        # ── Evaluation bar ────────────────────────────────────────────────
+        try:
+            if not self.board.is_game_over():
+                raw = self._evaluator.evaluate(self.board)
+                # evaluate() trả về điểm từ góc nhìn của bên đang đi.
+                # Ta muốn: dương = lợi thế Trắng, âm = lợi thế Đen.
+                score_white_pov = raw if self.board.turn == chess.WHITE else -raw
+                # Clamp về pawn units (1 pawn = 100 cp), giới hạn ±10 pawn
+                pawn_score = max(-10.0, min(10.0, score_white_pov / 100.0))
+                self.eval_bar.set_evaluation(pawn_score)
+            else:
+                result = self.board.result()
+                self.eval_bar.set_evaluation(10.0 if result == "1-0" else
+                                             -10.0 if result == "0-1" else 0.0)
+        except Exception as e:
+            print(f"Eval bar error: {e}")
+
+        # ── Captured pieces (hiển thị trong move history header) ──────────
+        try:
+            self.move_history.update_captured(self.board)
+        except Exception as e:
+            print(f"Captured pieces error: {e}")
+
     def update_board(self):
         """Update the visual representation of the chess board"""
+        self._refresh_eval_and_captured()
 
         selected = chess.parse_square(self.selected_square) if self.selected_square else None
         valid_destinations = [move.to_square for move in self.valid_moves]

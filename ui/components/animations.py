@@ -2,179 +2,213 @@
 # Description:
 # Animation components for chess piece movements using PyQt5's QPropertyAnimation.
 # Provides AnimatedLabel for smooth piece transitions with easing curves and drop shadows.
-# Includes specialized animations: CaptureAnimation (fade-out), EnPassantAnimation (parallel move + fade),
-# and CastlingAnimation (sequential king + rook movement).
-# Animation duration is configurable via Config.DEFAULT_ANIMATION_DURATION (default ~300ms).
+# Includes specialized animations:
+#   - CaptureAnimation: shrink + fade-out (scale down rồi biến mất)
+#   - EnPassantAnimation: parallel move + shrink/fade cho quân bị ăn
+#   - CastlingAnimation: king + rook di chuyển song song mượt mà
+# Animation duration configurable via Config.DEFAULT_ANIMATION_DURATION (default ~300ms).
+#
+# FIX NOTE:
+#   - Dùng QGraphicsOpacityEffect thay windowOpacity cho child widgets (windowOpacity
+#     chỉ hoạt động đúng với top-level windows).
+#   - Dùng b"geometry" thay b"pos" để tránh hiện tượng giật khi widget nằm trong layout.
+#   - CaptureAnimation: thu nhỏ (scale geometry về center) + fade đồng thời.
 
-from PyQt5.QtWidgets import QLabel, QGraphicsDropShadowEffect
+from PyQt5.QtWidgets import QLabel, QGraphicsDropShadowEffect, QGraphicsOpacityEffect
 from PyQt5.QtCore import (
-    QPropertyAnimation, QEasingCurve, QPoint, QSequentialAnimationGroup, 
+    QPropertyAnimation, QEasingCurve, QPoint, QRect, QSequentialAnimationGroup,
     QParallelAnimationGroup, Qt, pyqtSignal
 )
 from PyQt5.QtGui import QColor
 
 from utils.config import Config
 
+
 class AnimatedLabel(QLabel):
     """
-    Custom QLabel with animation capabilities for chess pieces.
-    Provides smooth movement with proper cleanup upon completion.
+    Custom QLabel với animation di chuyển mượt mà cho quân cờ.
+    Dùng b"pos" + OutQuint easing để chuyển động tự nhiên hơn OutCubic.
     """
-    
+
     animation_finished = pyqtSignal()
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        # Set up animation properties
+
+        # Animation di chuyển
         self.animation = QPropertyAnimation(self, b"pos")
-        self.animation.setEasingCurve(QEasingCurve.OutCubic)
+        self.animation.setEasingCurve(QEasingCurve.OutQuint)   # mượt hơn OutCubic
         self.animation.setDuration(Config.DEFAULT_ANIMATION_DURATION)
-        
-        # Connect finished signal
         self.animation.finished.connect(self.on_animation_finished)
-        
-        # Track animation state
+
         self._is_animating = False
-        
-        # Add drop shadow for visual depth
         self._add_shadow()
-    
+
     def _add_shadow(self):
-        """Add a drop shadow to the piece for better visual appearance."""
+        """Drop shadow nhẹ cho chiều sâu hình ảnh."""
         shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(10)
-        shadow.setColor(QColor(0, 0, 0, 160))
-        shadow.setOffset(3, 3)
+        shadow.setBlurRadius(8)
+        shadow.setColor(QColor(0, 0, 0, 140))
+        shadow.setOffset(2, 2)
         self.setGraphicsEffect(shadow)
-        
+
     def move_to(self, target_pos, duration=None):
         """
-        Animate movement to target position.
-        
+        Animate di chuyển đến target_pos.
+
         Args:
-            target_pos (QPoint): The target position to move to
-            duration (int, optional): Custom animation duration in ms
+            target_pos (QPoint): Vị trí đích
+            duration (int, optional): Thời gian animation tính bằng ms
         """
-        if duration:
+        if duration is not None:
             self.animation.setDuration(duration)
-            
-        # Cancel any ongoing animation
+
         if self._is_animating:
             self.animation.stop()
-            
+
         self._is_animating = True
-        start_pos = self.pos()
-        self.animation.setStartValue(start_pos)
+        self.animation.setStartValue(self.pos())
         self.animation.setEndValue(target_pos)
         self.animation.start()
-    
+
     def on_animation_finished(self):
-        """Handle animation completion."""
         self._is_animating = False
         self.animation_finished.emit()
-    
+
     def cancel_animation(self):
-        """Cancel any ongoing animation."""
         if self._is_animating:
             self.animation.stop()
             self._is_animating = False
 
-class CaptureAnimation(QSequentialAnimationGroup):
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helper: tạo QGraphicsOpacityEffect và QPropertyAnimation fade-out
+# Dùng thay windowOpacity vì windowOpacity không hoạt động với child widget.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _make_opacity_effect(widget):
+    """Gắn QGraphicsOpacityEffect vào widget và trả về (effect, anim)."""
+    effect = QGraphicsOpacityEffect(widget)
+    effect.setOpacity(1.0)
+    widget.setGraphicsEffect(effect)
+
+    anim = QPropertyAnimation(effect, b"opacity")
+    anim.setStartValue(1.0)
+    anim.setEndValue(0.0)
+    anim.setEasingCurve(QEasingCurve.InQuad)
+    return effect, anim
+
+
+def _make_shrink_anim(widget, duration):
     """
-    Animation for piece captures with specialized effects.
-    Shows a captured piece being removed from the board with visual feedback.
+    Tạo animation thu nhỏ geometry về điểm trung tâm.
+    Quân cờ sẽ 'co lại' về giữa trước khi biến mất.
     """
-    
+    rect = widget.geometry()
+    cx = rect.x() + rect.width() // 2
+    cy = rect.y() + rect.height() // 2
+
+    anim = QPropertyAnimation(widget, b"geometry")
+    anim.setStartValue(rect)
+    anim.setEndValue(QRect(cx, cy, 0, 0))   # thu về điểm trung tâm
+    anim.setDuration(duration)
+    anim.setEasingCurve(QEasingCurve.InBack)  # hơi "bật ngược" rồi co — trông tự nhiên
+    return anim
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+class CaptureAnimation(QParallelAnimationGroup):
+    """
+    Animation khi ăn quân: thu nhỏ + fade-out đồng thời.
+    Hiệu ứng: quân bị ăn co dần về trung tâm và mờ đi rồi biến mất.
+    """
+
     def __init__(self, piece_label, parent=None):
         super().__init__(parent)
         self.piece_label = piece_label
-        
-        # Create fade out animation
-        self.fade_out = QPropertyAnimation(piece_label, b"windowOpacity")
-        self.fade_out.setStartValue(1.0)
-        self.fade_out.setEndValue(0.0)
-        self.fade_out.setDuration(300)
-        self.fade_out.setEasingCurve(QEasingCurve.OutQuad)
-        
-        # Add to animation group
-        self.addAnimation(self.fade_out)
-        
-        # Connect finished signal
-        self.finished.connect(self.cleanup)
-    
-    def cleanup(self):
-        """Clean up after animation completes."""
+
+        duration = max(250, Config.DEFAULT_ANIMATION_DURATION - 50)
+
+        # 1. Thu nhỏ geometry
+        shrink = _make_shrink_anim(piece_label, duration)
+        self.addAnimation(shrink)
+
+        # 2. Fade-out opacity — cần tạo effect trước khi shrink
+        #    (shrink thay geometry, không ảnh hưởng opacity)
+        _effect, fade = _make_opacity_effect(piece_label)
+        fade.setDuration(duration)
+        self.addAnimation(fade)
+
+        self.finished.connect(self._cleanup)
+
+    def _cleanup(self):
         self.piece_label.hide()
         self.piece_label.deleteLater()
-        
+
+
 class EnPassantAnimation(QParallelAnimationGroup):
     """
-    Specialized animation for en passant captures.
-    Shows both the moving pawn and the captured pawn with appropriate effects.
+    Animation en passant:
+    - Quân đang đi: di chuyển mượt đến ô đích
+    - Quân bị ăn (en passant): thu nhỏ + fade-out
     """
-    
+
     def __init__(self, moving_piece, captured_piece, target_pos, parent=None):
         super().__init__(parent)
-        self.moving_piece = moving_piece
+        self.moving_piece  = moving_piece
         self.captured_piece = captured_piece
-        
-        # Create movement animation for the capturing pawn
-        self.move_anim = QPropertyAnimation(moving_piece, b"pos")
-        self.move_anim.setStartValue(moving_piece.pos())
-        self.move_anim.setEndValue(target_pos)
-        self.move_anim.setDuration(Config.DEFAULT_ANIMATION_DURATION)
-        self.move_anim.setEasingCurve(QEasingCurve.OutCubic)
-        
-        # Create fade out animation for the captured pawn
-        self.fade_out = QPropertyAnimation(captured_piece, b"windowOpacity")
-        self.fade_out.setStartValue(1.0)
-        self.fade_out.setEndValue(0.0)
-        self.fade_out.setDuration(Config.DEFAULT_ANIMATION_DURATION)
-        self.fade_out.setEasingCurve(QEasingCurve.OutQuad)
-        
-        # Add both animations to run in parallel
-        self.addAnimation(self.move_anim)
-        self.addAnimation(self.fade_out)
-        
-        # Connect finished signal
-        self.finished.connect(self.cleanup)
-    
-    def cleanup(self):
-        """Clean up after animation completes."""
+
+        duration = Config.DEFAULT_ANIMATION_DURATION
+
+        # Di chuyển quân đang đi
+        move_anim = QPropertyAnimation(moving_piece, b"pos")
+        move_anim.setStartValue(moving_piece.pos())
+        move_anim.setEndValue(target_pos)
+        move_anim.setDuration(duration)
+        move_anim.setEasingCurve(QEasingCurve.OutQuint)
+        self.addAnimation(move_anim)
+
+        # Thu nhỏ quân bị ăn
+        shrink = _make_shrink_anim(captured_piece, duration)
+        self.addAnimation(shrink)
+
+        # Fade-out quân bị ăn
+        _effect, fade = _make_opacity_effect(captured_piece)
+        fade.setDuration(duration)
+        self.addAnimation(fade)
+
+        self.finished.connect(self._cleanup)
+
+    def _cleanup(self):
         self.captured_piece.hide()
         self.captured_piece.deleteLater()
 
-class CastlingAnimation(QSequentialAnimationGroup):
+
+class CastlingAnimation(QParallelAnimationGroup):
     """
-    Animation for castling moves showing both king and rook movement.
+    Animation nhập thành: vua và xe di chuyển song song, cùng lúc.
+    Dùng QParallelAnimationGroup thay QSequentialAnimationGroup để mượt hơn.
     """
-    
+
     def __init__(self, king_label, rook_label, king_target, rook_target, parent=None):
         super().__init__(parent)
-        self.king_label = king_label
-        self.rook_label = rook_label
-        
-        # Create parallel animation group for simultaneous movement
-        parallel_group = QParallelAnimationGroup()
-        
-        # King animation
+
+        duration = Config.DEFAULT_ANIMATION_DURATION
+
+        # Vua
         king_anim = QPropertyAnimation(king_label, b"pos")
         king_anim.setStartValue(king_label.pos())
         king_anim.setEndValue(king_target)
-        king_anim.setDuration(Config.DEFAULT_ANIMATION_DURATION)
-        king_anim.setEasingCurve(QEasingCurve.OutCubic)
-        
-        # Rook animation
+        king_anim.setDuration(duration)
+        king_anim.setEasingCurve(QEasingCurve.OutQuint)
+
+        # Xe — chạy hơi nhanh hơn một chút để trông tự nhiên
         rook_anim = QPropertyAnimation(rook_label, b"pos")
         rook_anim.setStartValue(rook_label.pos())
         rook_anim.setEndValue(rook_target)
-        rook_anim.setDuration(Config.DEFAULT_ANIMATION_DURATION)
-        rook_anim.setEasingCurve(QEasingCurve.OutCubic)
-        
-        # Add animations to the parallel group
-        parallel_group.addAnimation(king_anim)
-        parallel_group.addAnimation(rook_anim)
-        
-        # Add the parallel group to this sequential group
-        self.addAnimation(parallel_group)
+        rook_anim.setDuration(int(duration * 0.85))
+        rook_anim.setEasingCurve(QEasingCurve.OutQuint)
+
+        self.addAnimation(king_anim)
+        self.addAnimation(rook_anim)

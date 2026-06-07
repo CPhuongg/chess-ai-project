@@ -6,8 +6,8 @@
 # Scrolls to bottom automatically when new moves are added.
 
 from PyQt5.QtWidgets import (
-    QFrame, QVBoxLayout, QLabel, QListWidget, QListWidgetItem,
-    QSizePolicy
+    QFrame, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
+    QSizePolicy, QWidget
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QBrush, QColor, QFont
@@ -23,12 +23,31 @@ TEXT_DIM   = "#666666"
 ACCENT     = "#769656"
 # ───────────────────────────────────────────────────────────────────────────
 
+# Ký tự chữ cái cho quân cờ (P, N, B, R, Q)
+_PIECE_LETTER = {
+    chess.PAWN:   "P",
+    chess.KNIGHT: "N",
+    chess.BISHOP: "B",
+    chess.ROOK:   "R",
+    chess.QUEEN:  "Q",
+}
+
+# Thứ tự sắp xếp: hậu > xe > tượng = mã > tốt
+_PIECE_ORDER = {chess.QUEEN: 5, chess.ROOK: 4, chess.BISHOP: 3,
+                chess.KNIGHT: 3, chess.PAWN: 2, chess.KING: 1}
+
+
+def _build_captured_text(pieces: list[int]) -> str:
+    """Chuyển list piece_type → chuỗi ký tự, sắp xếp theo giá trị."""
+    if not pieces:
+        return "—"
+    sorted_p = sorted(pieces, key=lambda p: _PIECE_ORDER.get(p, 0), reverse=True)
+    return " ".join(_PIECE_LETTER.get(p, "?") for p in sorted_p)
+
 
 class MoveHistoryWidget(QFrame):
     """
-    Bảng lịch sử nước đi.
-    Hai cột per dòng: số thứ tự | nước Trắng | nước Đen.
-    Nền tối, font monospace.
+    Bảng lịch sử nước đi + hiển thị quân bị ăn ngay bên dưới header.
     """
 
     def __init__(self, parent=None):
@@ -56,6 +75,44 @@ class MoveHistoryWidget(QFrame):
             padding: 0px;
         """)
         layout.addWidget(header)
+
+        # ── Captured pieces row ────────────────────────────────────────────
+        cap_row = QWidget()
+        cap_row.setFixedHeight(36)
+        cap_row.setStyleSheet(f"background-color: #1A1A1A; border-bottom: 1px solid {BORDER_CLR};")
+        cap_layout = QHBoxLayout(cap_row)
+        cap_layout.setContentsMargins(6, 2, 6, 2)
+        cap_layout.setSpacing(4)
+
+        _cap_style = f"""
+            font-family: 'Courier New', monospace;
+            font-size: 9pt;
+            font-weight: bold;
+            background: transparent;
+            padding: 0px 2px;
+        """
+
+        # Trắng bị ăn (hiển thị bên trái)
+        self._white_cap_lbl = QLabel("—")
+        self._white_cap_lbl.setStyleSheet(_cap_style + f"color: #D4C5A9;")  # kem nhạt
+        self._white_cap_lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self._white_cap_lbl.setToolTip("White pieces captured by Black")
+
+        sep = QLabel("│")
+        sep.setStyleSheet(f"color: {BORDER_CLR}; background: transparent;")
+        sep.setFixedWidth(10)
+        sep.setAlignment(Qt.AlignCenter)
+
+        # Đen bị ăn (hiển thị bên phải)
+        self._black_cap_lbl = QLabel("—")
+        self._black_cap_lbl.setStyleSheet(_cap_style + f"color: #8B7355;")  # nâu đậm
+        self._black_cap_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._black_cap_lbl.setToolTip("Black pieces captured by White")
+
+        cap_layout.addWidget(self._white_cap_lbl, 1)
+        cap_layout.addWidget(sep)
+        cap_layout.addWidget(self._black_cap_lbl, 1)
+        layout.addWidget(cap_row)
 
         # ── Column headers ─────────────────────────────────────────────────
         col_hdr = QLabel("  #    WHITE                      BLACK")
@@ -162,6 +219,39 @@ class MoveHistoryWidget(QFrame):
                 self.move_list.addItem(f"  {move_num}.  {from_square}-{to_square}")
             else:
                 self.move_list.addItem(f"  ...   {from_square}-{to_square}")
+
+    def update_captured(self, board: chess.Board):
+        """
+        Tính quân bị ăn từ board hiện tại (so sánh với vị trí ban đầu)
+        rồi cập nhật 2 label trong header.
+        Trắng bị ăn → hiển thị bên trái (quân Trắng mất).
+        Đen bị ăn  → hiển thị bên phải (quân Đen mất).
+        """
+        initial = {
+            chess.WHITE: {chess.PAWN: 8, chess.KNIGHT: 2, chess.BISHOP: 2,
+                          chess.ROOK: 2, chess.QUEEN: 1},
+            chess.BLACK: {chess.PAWN: 8, chess.KNIGHT: 2, chess.BISHOP: 2,
+                          chess.ROOK: 2, chess.QUEEN: 1},
+        }
+        current = {
+            chess.WHITE: {t: 0 for t in initial[chess.WHITE]},
+            chess.BLACK: {t: 0 for t in initial[chess.BLACK]},
+        }
+        for sq in chess.SQUARES:
+            p = board.piece_at(sq)
+            if p and p.piece_type in current[p.color]:
+                current[p.color][p.piece_type] += 1
+
+        white_lost, black_lost = [], []
+        for pt in initial[chess.WHITE]:
+            diff = initial[chess.WHITE][pt] - current[chess.WHITE][pt]
+            white_lost.extend([pt] * max(0, diff))
+        for pt in initial[chess.BLACK]:
+            diff = initial[chess.BLACK][pt] - current[chess.BLACK][pt]
+            black_lost.extend([pt] * max(0, diff))
+
+        self._white_cap_lbl.setText(_build_captured_text(white_lost))
+        self._black_cap_lbl.setText(_build_captured_text(black_lost))
 
     def clear_history(self):
         self.move_list.clear()
