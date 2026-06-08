@@ -11,7 +11,7 @@ import json
 import datetime
 from PyQt5.QtWidgets import (
     QScrollArea, QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
-    QFileDialog, QMessageBox, QSizePolicy, QGridLayout
+    QFileDialog, QMessageBox, QSizePolicy, QGridLayout, QComboBox
 )
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QColor, QFont
@@ -35,7 +35,8 @@ class SavedGameManager:
 
     @staticmethod
     def save_game(board, game_mode, turn, last_move_from, last_move_to,
-                  game_name=None, game_notes=None, timer_settings=None):
+                  game_name=None, game_notes=None, timer_settings=None,
+                  player_color=None, board_flipped=None):
         try:
             if not board:
                 raise ValueError("Cannot save an empty board")
@@ -45,6 +46,8 @@ class SavedGameManager:
                 'fen': board.fen(),
                 'mode': game_mode,
                 'turn': turn,
+                'player_color': player_color or 'white',
+                'board_flipped': bool(board_flipped),
                 'last_move_from': last_move_from,
                 'last_move_to': last_move_to,
                 'move_history': [move.uci() for move in board.move_stack],
@@ -58,7 +61,9 @@ class SavedGameManager:
                     'initial_black_time_ms': timer_settings.get('initial_black_time_ms', 0),
                     'white_time_ms': timer_settings.get('white_time_ms', 0),
                     'black_time_ms': timer_settings.get('black_time_ms', 0),
-                    'active_player': timer_settings.get('active_player', None)
+                    'active_player': timer_settings.get('active_player', None),
+                    'white_increment_ms': timer_settings.get('white_increment_ms', 3000),
+                    'black_increment_ms': timer_settings.get('black_increment_ms', 3000)
                 }
 
             if game_name and isinstance(game_name, str):
@@ -226,6 +231,24 @@ class AIControlPanel(QScrollArea):
         self.main_layout.addWidget(self.title)
         self.main_layout.addWidget(_Divider())
 
+        self.main_layout.addWidget(_SectionLabel("state"))
+        self.mode_label = QLabel("Mode: -")
+        self.turn_label = QLabel("Turn: -")
+        self.status_label = QLabel("Status: Ready")
+        self.color_label = QLabel("Human: White")
+        for lbl in (self.mode_label, self.turn_label, self.status_label, self.color_label):
+            lbl.setWordWrap(True)
+            lbl.setStyleSheet(f"""
+                font-family: 'Courier New', monospace;
+                font-size: 9pt;
+                color: {TEXT_MAIN};
+                background-color: {BG_DARK};
+                border: 1px solid {DIVIDER};
+                padding: 5px 7px;
+            """)
+            self.main_layout.addWidget(lbl)
+        self.main_layout.addWidget(_Divider())
+
         # ── Game control buttons (2×2 grid) ────────────────────────────────
         self.main_layout.addWidget(_SectionLabel("game"))
         grid_widget = QWidget()
@@ -235,9 +258,9 @@ class AIControlPanel(QScrollArea):
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
 
-        self.start_button  = ControlButton("▶ START",  "#3A5A3A")
-        self.pause_button  = ControlButton("⏸ PAUSE",  "#4A4A2A")
-        self.reset_button  = ControlButton("↻ RESET",  "#3A3A3A")
+        self.start_button  = ControlButton("START",  "#3A5A3A")
+        self.pause_button  = ControlButton("PAUSE",  "#4A4A2A")
+        self.reset_button  = ControlButton("NEW GAME",  "#3A3A3A")
         self.save_button   = ControlButton("💾 SAVE",   "#2A3A4A")
 
         for btn in (self.start_button, self.pause_button,
@@ -261,11 +284,43 @@ class AIControlPanel(QScrollArea):
         self.resign_button.setMinimumWidth(110)
         self.main_layout.addWidget(self.resign_button)
 
-        self.home_button = ControlButton("⌂  HOME", "#3A3A3A")
+        self.home_button = ControlButton("CHOOSE MODE", "#3A3A3A")
         self.home_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.home_button.setFixedHeight(36)
         self.home_button.setMinimumWidth(110)
         self.main_layout.addWidget(self.home_button)
+
+        self.flip_button = ControlButton("FLIP BOARD", "#2A3A4A")
+        self.flip_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.flip_button.setFixedHeight(36)
+        self.flip_button.setMinimumWidth(110)
+        self.main_layout.addWidget(self.flip_button)
+
+        self.main_layout.addWidget(_Divider())
+        self.main_layout.addWidget(_SectionLabel("difficulty"))
+        self.difficulty_combo = QComboBox()
+        self.difficulty_combo.addItems(["Easy", "Medium", "Hard"])
+        self.difficulty_combo.setCurrentText("Medium")
+        self.difficulty_combo.setStyleSheet(f"""
+            QComboBox {{
+                background-color: {BG_DARK};
+                color: {TEXT_MAIN};
+                border: 1px solid {DIVIDER};
+                padding: 5px 7px;
+                font-family: 'Courier New', monospace;
+                font-size: 9pt;
+            }}
+            QComboBox::drop-down {{
+                border: none;
+                width: 22px;
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: {PANEL_BG};
+                color: {TEXT_MAIN};
+                selection-background-color: {ACCENT};
+            }}
+        """)
+        self.main_layout.addWidget(self.difficulty_combo)
 
         # ── Undo container ─────────────────────────────────────────────────
         self.main_layout.addWidget(_SectionLabel(""))
@@ -297,6 +352,11 @@ class AIControlPanel(QScrollArea):
     # ── Mode helpers ───────────────────────────────────────────────────────
     def set_human_ai_mode(self):
         self.title.setText("HUMAN vs AI")
+        self.start_button.show()
+        self.pause_button.show()
+
+    def set_human_human_mode(self):
+        self.title.setText("HUMAN vs HUMAN")
         self.start_button.show()
         self.pause_button.show()
 

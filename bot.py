@@ -310,6 +310,7 @@ class ChessBot:
         # Thiết lập độ sâu cho searcher
         if hasattr(self.searcher, 'max_depth'):
             self.searcher.max_depth = depth
+            self.searcher.start_depth = max(1, min(self.searcher.start_depth, depth))
 
         # Tạo một Event để đồng bộ
         result_event = Event()

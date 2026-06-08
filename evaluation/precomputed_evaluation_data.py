@@ -47,6 +47,3 @@ class PrecomputedEvaluationData:
 
 # Initialize the PrecomputedEvaluationData
 PrecomputedEvaluationData.initialize()
-
-# Print pawn shield squares for a particular square (e.g., square 0)
-print(PrecomputedEvaluationData.pawn_shield_squares_white[0])  # Shield squares for white at square 0

@@ -70,21 +70,22 @@ class ChessApp(QApplication):
 
         if start_screen.exec_() == QDialog.Accepted:
             mode = start_screen.get_mode()
+            player_color = start_screen.get_player_color()
             if mode:
-                self.start_new_game_with_time_selection(mode)
+                self.start_new_game_with_time_selection(mode, player_color)
 
-    def start_new_game_with_time_selection(self, mode):
+    def start_new_game_with_time_selection(self, mode, player_color="white"):
         time_dialog = TimeModeDialog()
         if time_dialog.exec_() == QDialog.Accepted:
             is_time_mode, white_time_ms, black_time_ms, white_inc_ms, black_inc_ms = \
                 time_dialog.get_time_settings()
-            self.chess_window = ChessBoard(mode, self)
+            self.chess_window = ChessBoard(mode, self, player_color=player_color)
             self.chess_window.setup_time_mode(
                 is_time_mode, white_time_ms, black_time_ms,
                 white_inc_ms, black_inc_ms
             )
-            if mode == "human_ai" and is_time_mode:
-                self.chess_window.switch_timer_to_player('human')
+            if mode in ("human_ai", "human_human") and is_time_mode:
+                self.chess_window.switch_timer_to_board_turn()
             # Set window to full screen by default
             self.chess_window.showMaximized()  # THAY ĐỔI: showMaximized thay vì show
         else:
@@ -103,6 +104,7 @@ class ChessApp(QApplication):
     def start_loaded_game(self, game_data):
         try:
             mode = game_data.get('mode', 'human_ai')
+            player_color = game_data.get('player_color', 'white')
             if self.chess_window:
                 self.chess_window.close()
                 self.chess_window.deleteLater()
@@ -127,7 +129,7 @@ class ChessApp(QApplication):
                     is_time_mode, white_time_ms, black_time_ms, white_inc_ms, black_inc_ms = \
                         td.get_time_settings()
 
-            self.chess_window = ChessBoard(mode, self, game_data)
+            self.chess_window = ChessBoard(mode, self, game_data, player_color=player_color)
             self.chess_window.setup_time_mode(
                 is_time_mode, white_time_ms, black_time_ms,
                 white_inc_ms, black_inc_ms
@@ -135,10 +137,8 @@ class ChessApp(QApplication):
 
             if is_time_mode:
                 current = game_data.get('turn', 'human')
-                if mode == "human_ai":
-                    self.chess_window.switch_timer_to_player(
-                        'human' if current == 'human' else 'ai'
-                    )
+                if mode in ("human_ai", "human_human"):
+                    self.chess_window.switch_timer_to_board_turn()
                 else:
                     self.chess_window.switch_timer_to_player(
                         'ai1' if current == 'ai1' else 'ai2'

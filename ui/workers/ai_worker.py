@@ -33,6 +33,8 @@ def ai_worker_process(board_fen, depth, time_ms, result_queue, cancel_event,
             initial_fen=board_fen,
             opening_book_path="resources/komodo.bin"
         )
+        if hasattr(worker_bot, "searcher"):
+            worker_bot.searcher.max_depth = depth
         
         # Check for cancellation
         if cancel_event.is_set():

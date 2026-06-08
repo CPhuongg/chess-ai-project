@@ -111,9 +111,9 @@ class PieceSquareTable:
     def __init__():
         PieceSquareTable.tables = [None] * 6  # 6 quân cờ: Pawn, Rook, Knight, Bishop, Queen, King
         PieceSquareTable.tables[0] = PieceSquareTable.pawns  # Pawn
-        PieceSquareTable.tables[1] = PieceSquareTable.rooks  # Rook
-        PieceSquareTable.tables[2] = PieceSquareTable.knights  # Knight
-        PieceSquareTable.tables[3] = PieceSquareTable.bishops  # Bishop
+        PieceSquareTable.tables[1] = PieceSquareTable.knights  # Knight
+        PieceSquareTable.tables[2] = PieceSquareTable.bishops  # Bishop
+        PieceSquareTable.tables[3] = PieceSquareTable.rooks  # Rook
         PieceSquareTable.tables[4] = PieceSquareTable.queens  # Queen
         PieceSquareTable.tables[5] = PieceSquareTable.king_start  # King (start position)
 
@@ -130,3 +130,6 @@ class PieceSquareTable:
     def piece_square_value(piece, square):
         """Trả về giá trị của một quân cờ ở một ô cụ thể"""
         return PieceSquareTable.tables[piece][square]
+
+
+PieceSquareTable.__init__()

@@ -238,6 +238,7 @@ class PawnPromotionDialog(BaseDialog):
     def __init__(self, color="white", parent=None):
         super().__init__("Pawn Promotion", parent)
         self.setFixedWidth(340)
+        self.selected_piece_type = None
 
         import chess
         pieces = [
@@ -284,8 +285,20 @@ class PawnPromotionDialog(BaseDialog):
         self.content_layout.addWidget(grid_w)
 
     def _select(self, piece_type):
+        self.selected_piece_type = piece_type
         self.piece_selected.emit(piece_type)
         self.accept()
+
+    def get_choice(self):
+        """Return the selected promotion piece in python-chess symbol form."""
+        import chess
+        symbols = {
+            chess.QUEEN: "q",
+            chess.ROOK: "r",
+            chess.BISHOP: "b",
+            chess.KNIGHT: "n",
+        }
+        return symbols.get(self.selected_piece_type, "q")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -434,9 +447,10 @@ class StartScreen(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Chess Game")
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
-        self.setFixedSize(480, 520)
+        self.setFixedSize(480, 640)
         self.setStyleSheet(f"background-color: {BG_DARK};")
         self._mode = None
+        self._player_color = "white"
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(40, 40, 40, 40)
@@ -542,6 +556,58 @@ class StartScreen(QDialog):
 
         layout.addSpacing(8)
 
+        hvh_btn = QPushButton("HUMAN  vs  HUMAN")
+        hvh_btn.setCursor(Qt.PointingHandCursor)
+        hvh_btn.setFixedHeight(46)
+        hvh_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #3A3A3A;
+                color: {TEXT_MAIN};
+                font-family: {_MONO};
+                font-size: 12pt;
+                font-weight: bold;
+                border: 1px solid #555555;
+                letter-spacing: 1px;
+            }}
+            QPushButton:hover {{
+                background-color: #4A4A4A;
+            }}
+            QPushButton:pressed {{
+                background-color: #2A2A2A;
+            }}
+        """)
+        hvh_btn.clicked.connect(lambda: self._select("human_human"))
+        layout.addWidget(hvh_btn)
+
+        layout.addSpacing(12)
+
+        color_lbl = QLabel("HUMAN COLOR")
+        color_lbl.setAlignment(Qt.AlignCenter)
+        color_lbl.setStyleSheet(f"""
+            font-family: {_MONO};
+            font-size: 8pt;
+            color: {TEXT_DIM};
+            letter-spacing: 3px;
+            padding-bottom: 6px;
+        """)
+        layout.addWidget(color_lbl)
+
+        color_row = QHBoxLayout()
+        color_row.setSpacing(8)
+        self.white_color_button = QPushButton("WHITE")
+        self.black_color_button = QPushButton("BLACK")
+        for btn in (self.white_color_button, self.black_color_button):
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setCheckable(True)
+            btn.setFixedHeight(34)
+            color_row.addWidget(btn)
+        self.white_color_button.clicked.connect(lambda: self._set_player_color("white"))
+        self.black_color_button.clicked.connect(lambda: self._set_player_color("black"))
+        layout.addLayout(color_row)
+        self._refresh_color_buttons()
+
+        layout.addSpacing(8)
+
         # ── Load game ──────────────────────────────────────────────────────
         self.load_game_button = QPushButton("📂  LOAD SAVED GAME")
         self.load_game_button.setCursor(Qt.PointingHandCursor)
@@ -576,3 +642,40 @@ class StartScreen(QDialog):
 
     def get_mode(self):
         return self._mode
+
+    def _set_player_color(self, color):
+        self._player_color = color
+        self._refresh_color_buttons()
+
+    def _refresh_color_buttons(self):
+        active = f"""
+            QPushButton {{
+                background-color: {ACCENT_GRN};
+                color: {TEXT_MAIN};
+                font-family: {_MONO};
+                font-size: 10pt;
+                font-weight: bold;
+                border: 1px solid {QColor(ACCENT_GRN).lighter(130).name()};
+            }}
+        """
+        inactive = f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {TEXT_DIM};
+                font-family: {_MONO};
+                font-size: 10pt;
+                font-weight: bold;
+                border: 1px solid {BORDER_CLR};
+            }}
+            QPushButton:hover {{
+                color: {TEXT_MAIN};
+                border-color: #555555;
+            }}
+        """
+        self.white_color_button.setChecked(self._player_color == "white")
+        self.black_color_button.setChecked(self._player_color == "black")
+        self.white_color_button.setStyleSheet(active if self._player_color == "white" else inactive)
+        self.black_color_button.setStyleSheet(active if self._player_color == "black" else inactive)
+
+    def get_player_color(self):
+        return self._player_color

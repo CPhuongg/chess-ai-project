@@ -47,6 +47,7 @@ class Searcher:
         self.search_total_timer = time.time()
         self.cancel_time = 0  # Thời điểm nhận tín hiệu hủy tìm kiếm
         self.start_depth = 1
+        self.max_depth = 4
 
         # References and initialization
         self.evaluation = Evaluation()
@@ -112,7 +113,7 @@ class Searcher:
         self.search_cancelled = False
 
     def run_iterative_deepening_search(self):
-        for search_depth in range(self.start_depth, 10):
+        for search_depth in range(self.start_depth, self.max_depth + 1):
             print(f"Starting depth {search_depth}")
             self.has_searched_at_least_one_move = False
             self.debug_info += f"\nStarting Iteration: {search_depth}"
@@ -214,8 +215,7 @@ class Searcher:
         )
 
         # Order moves
-        opponent_attack_map = chess.SquareSet()
-        opponent_pawn_attack_map = chess.SquareSet()
+        opponent_attack_map, opponent_pawn_attack_map = self.get_opponent_attack_maps()
         self.move_orderer.order_moves(
             prev_best_move,
             self.board, legal_moves,
@@ -406,7 +406,23 @@ class Searcher:
                 self.start_depth = depth
             else:
                 break
+        self.start_depth = max(1, min(self.start_depth, self.max_depth))
         print(f"start search at depth {self.start_depth}")
+
+    def get_opponent_attack_maps(self):
+        """Build attack maps used by move ordering to avoid unsafe target squares."""
+        opponent = not self.board.turn
+        attacks = chess.SquareSet()
+        pawn_attacks = chess.SquareSet()
+
+        for square in chess.SQUARES:
+            if self.board.is_attacked_by(opponent, square):
+                attacks.add(square)
+
+        for pawn_square in self.board.pieces(chess.PAWN, opponent):
+            pawn_attacks |= self.board.attacks(pawn_square)
+
+        return attacks, pawn_attacks
 
     def score_capture(self, move):
         """Score a capture move for move ordering in quiescence search"""

@@ -84,9 +84,40 @@ class Evaluation:
             board
         )
 
+        white_eval.center_control_score = self.evaluate_center_control(chess.WHITE, board)
+        black_eval.center_control_score = self.evaluate_center_control(chess.BLACK, board)
+
         perspective = 1 if board.turn == chess.WHITE else -1
         eval_score = white_eval.sum() - black_eval.sum()
-        return eval_score * perspective
+        score = eval_score * perspective
+        if board.is_check():
+            score -= 45
+        return score
+
+    def evaluate_center_control(self, colour_index: int, board: chess.Board) -> int:
+        """Reward occupying and attacking central squares."""
+        center_squares = [chess.D4, chess.E4, chess.D5, chess.E5]
+        extended_center = [
+            chess.C3, chess.D3, chess.E3, chess.F3,
+            chess.C4, chess.F4, chess.C5, chess.F5,
+            chess.C6, chess.D6, chess.E6, chess.F6,
+        ]
+        score = 0
+
+        for square in center_squares:
+            piece = board.piece_at(square)
+            if piece and piece.color == colour_index:
+                score += 18
+            score += 6 * len(board.attackers(colour_index, square))
+
+        for square in extended_center:
+            piece = board.piece_at(square)
+            if piece and piece.color == colour_index:
+                score += 5
+            if board.is_attacked_by(colour_index, square):
+                score += 2
+
+        return score
 
     def king_pawn_shield(self, colour_index: int, enemy_material, enemy_piece_square_score: float, board: chess.Board) -> int:
         if enemy_material.endgame_t >= 1:
@@ -350,11 +381,13 @@ class EvaluationData:
         self.piece_square_score = 0
         self.pawn_score = 0
         self.pawn_shield_score = 0
+        self.center_control_score = 0
 
     def sum(self):
         return (self.material_score +
                 self.mop_up_score +
                 self.piece_square_score +
                 self.pawn_score +
-                self.pawn_shield_score
+                self.pawn_shield_score +
+                self.center_control_score
             )

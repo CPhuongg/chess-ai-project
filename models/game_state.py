@@ -26,10 +26,29 @@ class GameState:
         
         # Game configuration
         self.mode = mode
-        self.turn = 'human' if self.mode == "human_ai" else 'ai1'
+        self.turn = self._initial_turn()
         self.ai_game_running = False
         self.ai_computation_active = False
+        self.ai_depth = 3
         self.start_time = datetime.datetime.now()
+        self.end_time = None
+        self.game_name = f"Game on {self.start_time.strftime('%Y-%m-%d %H:%M')}"
+        self.game_notes = ""
+
+        # Game state tracking
+        self.selected_square = None
+        self.valid_moves = []
+        self.castling_moves = []
+        self.en_passant_moves = []
+        self.last_move_from = None
+        self.last_move_to = None
+        self.is_game_over = False
+        self.result = None
+        self.winner = None
+
+        # Move history for display and undo/redo
+        self.move_history = []
+        self.display_history = []
     
     def make_move(self, move_uci):
         """
@@ -89,6 +108,8 @@ class GameState:
             if not self.is_game_over:
                 if self.mode == "human_ai":
                     self.turn = 'ai' if self.turn == 'human' else 'human'
+                elif self.mode == "human_human":
+                    self.turn = 'human_black' if self.turn == 'human_white' else 'human_white'
                 else:  # AI vs AI
                     self.turn = 'ai2' if self.turn == 'ai1' else 'ai1'
             
@@ -138,6 +159,8 @@ class GameState:
         # Update turn
         if self.mode == "human_ai":
             self.turn = 'human' if len(self.board.move_stack) % 2 == 0 else 'ai'
+        elif self.mode == "human_human":
+            self.turn = 'human_white' if len(self.board.move_stack) % 2 == 0 else 'human_black'
         else:  # AI vs AI
             self.turn = 'ai1' if len(self.board.move_stack) % 2 == 0 else 'ai2'
         
@@ -303,33 +326,7 @@ class GameState:
         # Update game state
         game_state._update_game_state()
         
-        return game_state = 'human' if mode == "human_ai" else 'ai1'
-        
-        # Game state tracking
-        self.selected_square = None
-        self.valid_moves = []
-        self.castling_moves = []
-        self.en_passant_moves = []
-        self.last_move_from = None
-        self.last_move_to = None
-        self.is_game_over = False
-        self.result = None
-        self.winner = None
-        
-        # Move history for display and undo/redo
-        self.move_history = []
-        self.display_history = []  # For UI display (contains notation)
-        
-        # Game metadata
-        self.start_time = datetime.datetime.now()
-        self.end_time = None
-        self.game_name = f"Game on {self.start_time.strftime('%Y-%m-%d %H:%M')}"
-        self.game_notes = ""
-        
-        # AI state tracking
-        self.ai_computation_active = False
-        self.ai_depth = 3
-        self.ai_game_running = False
+        return game_state
     
     def reset(self):
         """Reset the game to initial state."""
@@ -345,4 +342,15 @@ class GameState:
         self.winner = None
         self.move_history = []
         self.display_history = []
-        self.turn
+        self.turn = self._initial_turn()
+        self.ai_game_running = False
+        self.ai_computation_active = False
+        self.start_time = datetime.datetime.now()
+        self.end_time = None
+
+    def _initial_turn(self):
+        if self.mode == "human_ai":
+            return "human"
+        if self.mode == "human_human":
+            return "human_white"
+        return "ai1"
