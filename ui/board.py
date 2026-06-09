@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QDialog,
     QSplitter, QFrame, QMessageBox
 )
-from PyQt5.QtCore import Qt, QPoint, QTimer, QPropertyAnimation
+from PyQt5.QtCore import Qt, QPoint, QRect, QTimer, QPropertyAnimation
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import QApplication
 
@@ -241,28 +241,27 @@ class ChessBoard(QMainWindow):
         sidebar_splitter.setSizes([300, 300])
         
         # Connect control panel signals
-        self.control_panel.start_button.clicked.connect(self.start_game)  # CHANGED
+        self.control_panel.start_button.clicked.connect(self.start_game)
         if self.mode in ("human_ai", "human_human"):
-            self.control_panel.pause_button.clicked.connect(self.pause_human_ai_game)  # NEW
+            self.control_panel.pause_button.clicked.connect(self.pause_human_ai_game)
         else:
-            self.control_panel.pause_button.clicked.connect(self.pause_ai_game)  # EXISTING
+            self.control_panel.pause_button.clicked.connect(self.pause_ai_game)
         self.control_panel.reset_button.clicked.connect(self.reset_game)
         self.control_panel.home_button.clicked.connect(self.return_to_home)
         self.control_panel.save_button.clicked.connect(self.save_game)
         self.control_panel.flip_button.clicked.connect(self.toggle_board_orientation)
         self.control_panel.difficulty_combo.currentTextChanged.connect(self.update_ai_difficulty)
         
-        self.control_panel.start_button.setEnabled(True)   # CHANGED: Enable start button initially
+        self.control_panel.start_button.setEnabled(True)
         self.control_panel.pause_button.setEnabled(False)
         self.control_panel.depth_slider.valueChanged.connect(self.update_ai_depth)
         
         # Add to main splitter
         self.main_splitter.addWidget(game_area)
         self.main_splitter.addWidget(sidebar)
-        # Điều chỉnh tỷ lệ cho fullscreen
-        self.main_splitter.setSizes([800, 450])  # THAY ĐỔI: board rộng hơn
-        self.main_splitter.setStretchFactor(0, 3)  # THÊM: game area co giãn nhiều hơn
-        self.main_splitter.setStretchFactor(1, 1)  # THÊM: sidebar co giãn ít hơn
+        self.main_splitter.setSizes([800, 450])
+        self.main_splitter.setStretchFactor(0, 3)
+        self.main_splitter.setStretchFactor(1, 1)
 
 
         if self.mode == "human_ai":
@@ -301,8 +300,7 @@ class ChessBoard(QMainWindow):
         
         sys.excepthook = exception_hook
 
-        # CRITICAL FIX: Only show time dialog for NEW games from app.py
-        # Don't show any dialog here if load_game_data is provided
+        # Time selection is owned by app.py; the board only restores or renders state.
         if load_game_data:
             self.load_game_state(load_game_data)
         else:
@@ -1097,47 +1095,72 @@ class ChessBoard(QMainWindow):
         QTimer.singleShot(200, show_time_dialog_and_restart)
     
     def animate_piece_movement(self, from_pos, to_pos, piece_symbol, piece_color, capture=False, callback=None):
-        """Animate a piece moving from one square to another"""
-        # Create the animated piece (temporary overlay)
+        """Animate a piece between two board squares."""
+        from_square = self.squares[from_pos[0]][from_pos[1]]
+        to_square = self.squares[to_pos[0]][to_pos[1]]
+
+        from_top_left = from_square.mapTo(self.central_widget, QPoint(0, 0))
+        to_top_left = to_square.mapTo(self.central_widget, QPoint(0, 0))
+        from_rect = QRect(from_top_left, from_square.size())
+        to_rect = QRect(to_top_left, to_square.size())
+        font_size = max(28, int(min(from_rect.width(), from_rect.height()) * 0.68))
+
         animated_piece = AnimatedLabel(self.central_widget)
         animated_piece.setText(piece_symbol)
         animated_piece.setAlignment(Qt.AlignCenter)
         animated_piece.setStyleSheet(f"""
-            font-size: 40px; 
-            background-color: transparent; 
+            font-size: {font_size}px;
+            background-color: transparent;
             color: {piece_color};
             font-weight: bold;
         """)
-        animated_piece.setFixedSize(60, 60)
-        
-        # Position at the starting square
-        from_rect = self.squares[from_pos[0]][from_pos[1]].geometry()
-        global_from_pos = self.squares[from_pos[0]][from_pos[1]].mapTo(self.central_widget, QPoint(0, 0))
-        
-        animated_piece.move(global_from_pos)
+        animated_piece.setGeometry(from_rect)
+
+        source_text = from_square.text()
+        target_text = to_square.text() if capture else None
+        from_square.setText("")
+        if capture:
+            to_square.setText("")
+
+        animated_piece.raise_()
         animated_piece.show()
-        
-        # Calculate the end position
-        global_to_pos = self.squares[to_pos[0]][to_pos[1]].mapTo(self.central_widget, QPoint(0, 0))
-        
-        # Set up animation
-        animated_piece.animation.finished.connect(lambda: self.finish_animation(animated_piece, callback))
-        
-        # Start the animation
-        animated_piece.move_to(global_to_pos)
-        
-        # Store the animated piece to prevent garbage collection
+
+        animated_piece.animation.finished.connect(
+            lambda: self.finish_animation(
+                animated_piece,
+                callback,
+                from_square=from_square,
+                to_square=to_square,
+                source_text=source_text,
+                target_text=target_text,
+            )
+        )
+
         self.animated_pieces[id(animated_piece)] = animated_piece
+        animated_piece.move_to(to_rect)
     
-    def finish_animation(self, animated_piece, callback=None):
-        """Clean up after animation is complete and call the callback"""
-        # Remove the animated piece from display and memory
+    def finish_animation(
+        self,
+        animated_piece,
+        callback=None,
+        from_square=None,
+        to_square=None,
+        source_text=None,
+        target_text=None,
+    ):
+        """Clean up a movement overlay and continue the move flow."""
         animated_piece.hide()
         self.animated_pieces.pop(id(animated_piece), None)
-        
-        # Call the callback if provided
-        if callback:
-            callback()
+        try:
+            if callback:
+                callback()
+            else:
+                if from_square is not None and source_text is not None:
+                    from_square.setText(source_text)
+                if to_square is not None and target_text is not None:
+                    to_square.setText(target_text)
+        finally:
+            animated_piece.deleteLater()
     
     def ai_vs_ai_step(self):
         """Execute a single step in the AI vs AI game with smart time management."""
