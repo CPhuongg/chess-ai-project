@@ -13,18 +13,19 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QColor
+from ui import theme
 
 # ── Palette ────────────────────────────────────────────────────────────────
-BG_DARK    = "#141414"
-PANEL_BG   = "#1E1E1E"
-PANEL2     = "#242424"
-BORDER_CLR = "#383838"
-ACCENT_GRN = "#769656"
-ACCENT_RED = "#C1392B"
-TEXT_MAIN  = "#EFEFEF"
-TEXT_DIM   = "#888888"
-INPUT_BG   = "#2A2A2A"
-_MONO      = "'Courier New', monospace"
+BG_DARK    = theme.APP_BG
+PANEL_BG   = theme.SURFACE
+PANEL2     = theme.SURFACE_2
+BORDER_CLR = theme.BORDER
+ACCENT_GRN = theme.ACCENT
+ACCENT_RED = theme.DANGER
+TEXT_MAIN  = theme.TEXT
+TEXT_DIM   = theme.TEXT_MUTED
+INPUT_BG   = theme.SURFACE_2
+_MONO      = theme.FONT_UI
 # ───────────────────────────────────────────────────────────────────────────
 
 
@@ -36,6 +37,7 @@ def _label(text, dim=False, size=10):
         font-size: {size}pt;
         color: {color};
         background: transparent;
+        border: none;
     """)
     return lbl
 
@@ -46,26 +48,37 @@ def _spinbox(min_v, max_v, default, suffix=""):
     sb.setValue(default)
     if suffix:
         sb.setSuffix(f" {suffix}")
-    sb.setFixedHeight(30)
-    sb.setFixedWidth(90)
+    sb.setFixedHeight(38)
+    sb.setFixedWidth(158)
     sb.setStyleSheet(f"""
         QSpinBox {{
             font-family: {_MONO};
             font-size: 11pt;
-            font-weight: bold;
+            font-weight: 700;
             color: {TEXT_MAIN};
             background-color: {INPUT_BG};
             border: 1px solid {BORDER_CLR};
-            border-radius: 2px;
-            padding: 2px 6px;
+            border-radius: 6px;
+            padding: 4px 32px 4px 10px;
         }}
         QSpinBox:focus {{
             border-color: {ACCENT_GRN};
         }}
         QSpinBox::up-button, QSpinBox::down-button {{
-            width: 16px;
-            background-color: #333;
+            width: 22px;
+            background-color: {theme.SURFACE_3};
             border-left: 1px solid {BORDER_CLR};
+        }}
+        QSpinBox::up-button {{
+            subcontrol-origin: border;
+            subcontrol-position: top right;
+            border-top-right-radius: 6px;
+            border-bottom: 1px solid {BORDER_CLR};
+        }}
+        QSpinBox::down-button {{
+            subcontrol-origin: border;
+            subcontrol-position: bottom right;
+            border-bottom-right-radius: 6px;
         }}
     """)
     return sb
@@ -73,23 +86,24 @@ def _spinbox(min_v, max_v, default, suffix=""):
 
 def _preset_btn(text, parent_dialog, ms):
     btn = QPushButton(text)
-    btn.setFixedHeight(28)
+    btn.setFixedHeight(34)
+    btn.setMinimumWidth(76)
     btn.setCursor(Qt.PointingHandCursor)
     btn.setStyleSheet(f"""
         QPushButton {{
             font-family: {_MONO};
-            font-size: 9pt;
-            font-weight: bold;
+            font-size: 10pt;
+            font-weight: 700;
             color: {TEXT_DIM};
             background-color: {INPUT_BG};
             border: 1px solid {BORDER_CLR};
-            border-radius: 2px;
-            padding: 2px 8px;
+            border-radius: 6px;
+            padding: 4px 10px;
         }}
         QPushButton:hover {{
             color: {TEXT_MAIN};
             border-color: {ACCENT_GRN};
-            background-color: #2A3A2A;
+            background-color: {theme.SURFACE_3};
         }}
     """)
     btn.clicked.connect(lambda: parent_dialog._set_preset(ms))
@@ -103,7 +117,7 @@ class TimeModeDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Time Control")
         self.setModal(True)
-        self.setFixedSize(460, 390)
+        self.setFixedSize(700, 640)
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
         self.setStyleSheet(f"background-color: {PANEL_BG};")
 
@@ -114,27 +128,30 @@ class TimeModeDialog(QDialog):
 
         # ── Title bar ──────────────────────────────────────────────────────
         title_bar = QFrame()
-        title_bar.setFixedHeight(36)
+        title_bar.setObjectName("timeTitleBar")
+        title_bar.setFixedHeight(44)
         title_bar.setStyleSheet(f"""
-            QFrame {{
+            #timeTitleBar {{
                 background-color: {BG_DARK};
                 border-bottom: 1px solid {ACCENT_GRN};
             }}
         """)
         tb_layout = QHBoxLayout(title_bar)
-        tb_layout.setContentsMargins(12, 0, 12, 0)
+        tb_layout.setContentsMargins(20, 0, 18, 0)
         lbl = QLabel("  TIME CONTROL")
         lbl.setStyleSheet(f"""
             font-family: {_MONO};
-            font-size: 10pt;
-            font-weight: bold;
+            font-size: 12pt;
+            font-weight: 800;
             color: {ACCENT_GRN};
-            letter-spacing: 2px;
+            letter-spacing: 0px;
+            background: transparent;
+            border: none;
         """)
         tb_layout.addWidget(lbl)
         tb_layout.addStretch()
-        close_btn = QPushButton("✕")
-        close_btn.setFixedSize(24, 24)
+        close_btn = QPushButton("×")
+        close_btn.setFixedSize(30, 30)
         close_btn.setCursor(Qt.PointingHandCursor)
         close_btn.setStyleSheet(f"""
             QPushButton {{
@@ -153,16 +170,18 @@ class TimeModeDialog(QDialog):
         content = QWidget()
         content.setStyleSheet(f"background-color: {PANEL_BG};")
         cl = QVBoxLayout(content)
-        cl.setContentsMargins(20, 16, 20, 12)
-        cl.setSpacing(12)
+        cl.setContentsMargins(26, 20, 26, 18)
+        cl.setSpacing(14)
 
         # Mode select
         mode_sec = QLabel("MODE")
         mode_sec.setStyleSheet(f"""
             font-family: {_MONO};
-            font-size: 8pt;
+            font-size: 9pt;
             color: {TEXT_DIM};
-            letter-spacing: 3px;
+            letter-spacing: 0px;
+            background: transparent;
+            border: none;
         """)
         cl.addWidget(mode_sec)
 
@@ -173,7 +192,7 @@ class TimeModeDialog(QDialog):
             rb.setStyleSheet(f"""
                 QRadioButton {{
                     font-family: {_MONO};
-                    font-size: 11pt;
+                    font-size: 13pt;
                     color: {TEXT_MAIN};
                     spacing: 8px;
                     background: transparent;
@@ -209,30 +228,34 @@ class TimeModeDialog(QDialog):
 
         # Time settings container
         self._settings_box = QFrame()
+        self._settings_box.setObjectName("timeSettingsBox")
         self._settings_box.setStyleSheet(f"""
-            QFrame {{
+            #timeSettingsBox {{
                 background-color: {PANEL2};
                 border: 1px solid {BORDER_CLR};
-                border-radius: 2px;
+                border-radius: 8px;
             }}
         """)
         self._settings_box.setEnabled(False)
+        self._settings_box.setMinimumHeight(345)
         sbl = QVBoxLayout(self._settings_box)
-        sbl.setContentsMargins(12, 10, 12, 10)
-        sbl.setSpacing(8)
+        sbl.setContentsMargins(16, 14, 16, 14)
+        sbl.setSpacing(12)
 
         # Quick presets
         presets_lbl = QLabel("QUICK PRESETS")
         presets_lbl.setStyleSheet(f"""
             font-family: {_MONO};
-            font-size: 8pt;
+            font-size: 9pt;
             color: {TEXT_DIM};
-            letter-spacing: 2px;
+            letter-spacing: 0px;
+            background: transparent;
+            border: none;
         """)
         sbl.addWidget(presets_lbl)
 
         preset_row = QHBoxLayout()
-        preset_row.setSpacing(5)
+        preset_row.setSpacing(8)
         presets = [("1 min", 60_000), ("3 min", 180_000), ("5 min", 300_000),
                    ("10 min", 600_000), ("15 min", 900_000)]
         for name, ms in presets:
@@ -244,15 +267,17 @@ class TimeModeDialog(QDialog):
         time_lbl = QLabel("CUSTOM TIME")
         time_lbl.setStyleSheet(f"""
             font-family: {_MONO};
-            font-size: 8pt;
+            font-size: 9pt;
             color: {TEXT_DIM};
-            letter-spacing: 2px;
+            letter-spacing: 0px;
             margin-top: 4px;
+            background: transparent;
+            border: none;
         """)
         sbl.addWidget(time_lbl)
 
         time_row = QHBoxLayout()
-        time_row.setSpacing(8)
+        time_row.setSpacing(10)
         time_row.addWidget(_label("Min:"))
         self._minutes = _spinbox(0, 60, 5, "min")
         time_row.addWidget(self._minutes)
@@ -267,18 +292,21 @@ class TimeModeDialog(QDialog):
         inc_lbl = QLabel("INCREMENT (Fischer)")
         inc_lbl.setStyleSheet(f"""
             font-family: {_MONO};
-            font-size: 8pt;
+            font-size: 9pt;
             color: {TEXT_DIM};
-            letter-spacing: 2px;
+            letter-spacing: 0px;
             margin-top: 4px;
+            background: transparent;
+            border: none;
         """)
         sbl.addWidget(inc_lbl)
 
         inc_row = QHBoxLayout()
-        inc_row.setSpacing(8)
-        self._increment = _spinbox(0, 30, 3, "sec/move")
+        inc_row.setSpacing(10)
+        self._increment = _spinbox(0, 30, 3, "sec")
         inc_row.addWidget(self._increment)
-        note = _label("added after each move", dim=True, size=9)
+        note = _label("added after each move", dim=True, size=11)
+        note.setMinimumWidth(260)
         inc_row.addWidget(note)
         inc_row.addStretch()
         sbl.addLayout(inc_row)
@@ -288,32 +316,33 @@ class TimeModeDialog(QDialog):
 
         # ── Bottom button bar ──────────────────────────────────────────────
         btn_frame = QFrame()
+        btn_frame.setObjectName("timeButtonBar")
         btn_frame.setStyleSheet(f"""
-            QFrame {{
+            #timeButtonBar {{
                 background-color: {BG_DARK};
                 border-top: 1px solid {BORDER_CLR};
             }}
         """)
         bfl = QHBoxLayout(btn_frame)
-        bfl.setContentsMargins(16, 10, 16, 10)
+        bfl.setContentsMargins(20, 12, 20, 12)
         bfl.setSpacing(10)
         bfl.addStretch()
 
-        self._ok_btn = QPushButton("▶  START GAME")
-        self._ok_btn.setFixedHeight(34)
-        self._ok_btn.setMinimumWidth(130)
+        self._ok_btn = QPushButton("Start Game")
+        self._ok_btn.setFixedHeight(42)
+        self._ok_btn.setMinimumWidth(150)
         self._ok_btn.setCursor(Qt.PointingHandCursor)
         self._ok_btn.setStyleSheet(f"""
             QPushButton {{
                 font-family: {_MONO};
-                font-size: 10pt;
-                font-weight: bold;
+                font-size: 11pt;
+                font-weight: 800;
                 color: {TEXT_MAIN};
                 background-color: {ACCENT_GRN};
                 border: none;
-                border-radius: 2px;
-                padding: 4px 16px;
-                letter-spacing: 1px;
+                border-radius: 6px;
+                padding: 7px 18px;
+                letter-spacing: 0px;
             }}
             QPushButton:hover {{ background-color: {QColor(ACCENT_GRN).lighter(115).name()}; }}
             QPushButton:pressed {{ background-color: {QColor(ACCENT_GRN).darker(115).name()}; }}
@@ -321,21 +350,21 @@ class TimeModeDialog(QDialog):
         self._ok_btn.clicked.connect(self.accept)
 
         cancel_btn = QPushButton("CANCEL")
-        cancel_btn.setFixedHeight(34)
-        cancel_btn.setMinimumWidth(90)
+        cancel_btn.setFixedHeight(42)
+        cancel_btn.setMinimumWidth(112)
         cancel_btn.setCursor(Qt.PointingHandCursor)
         cancel_btn.setStyleSheet(f"""
             QPushButton {{
                 font-family: {_MONO};
-                font-size: 10pt;
-                font-weight: bold;
+                font-size: 11pt;
+                font-weight: 800;
                 color: {TEXT_DIM};
                 background-color: transparent;
                 border: 1px solid {BORDER_CLR};
-                border-radius: 2px;
-                padding: 4px 16px;
+                border-radius: 6px;
+                padding: 7px 18px;
             }}
-            QPushButton:hover {{ color: {TEXT_MAIN}; border-color: #555; }}
+            QPushButton:hover {{ color: {TEXT_MAIN}; border-color: {ACCENT_GRN}; }}
         """)
         cancel_btn.clicked.connect(self.reject)
 
@@ -348,7 +377,7 @@ class TimeModeDialog(QDialog):
 
     # ── drag ───────────────────────────────────────────────────────────────
     def mousePressEvent(self, e):
-        if e.pos().y() < 36:
+        if e.pos().y() < 44:
             self._drag_pos = e.globalPos() - self.frameGeometry().topLeft()
             e.accept()
 
@@ -363,14 +392,14 @@ class TimeModeDialog(QDialog):
     def _on_mode_change(self, _btn):
         timed = self._timed.isChecked()
         self._settings_box.setEnabled(timed)
-        self._ok_btn.setText("▶  START TIMED" if timed else "▶  START GAME")
+        self._ok_btn.setText("Start Timed" if timed else "Start Game")
 
     def _set_preset(self, ms):
         self._timed.setChecked(True)
         self._settings_box.setEnabled(True)
         self._minutes.setValue(ms // 60_000)
         self._seconds.setValue((ms % 60_000) // 1000)
-        self._ok_btn.setText(f"▶  START  ({ms//60000}:{(ms%60000)//1000:02d})")
+        self._ok_btn.setText(f"Start ({ms//60000}:{(ms%60000)//1000:02d})")
 
     # ── public API (compatible with original) ─────────────────────────────
     def get_time_settings(self):

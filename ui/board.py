@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QDialog,
     QSplitter, QFrame, QMessageBox
 )
-from PyQt5.QtCore import Qt, QPoint, QRect, QTimer, QPropertyAnimation
+from PyQt5.QtCore import Qt, QPoint, QTimer, QPropertyAnimation
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import QApplication
 
@@ -36,6 +36,7 @@ from ui.workers.ai_worker import ResponsiveAIManager
 from ui.components.chess_timer import ChessTimer
 from ui.components.time_mode_dialog import TimeModeDialog
 from evaluation.evaluation import Evaluation
+from ui import theme
 
 def exception_hook(exctype, value, tb):
     print(f"Ngoại lệ không được xử lý: {exctype}")
@@ -77,7 +78,7 @@ class ChessBoard(QMainWindow):
         self.setMinimumSize(800, 600)
         self.setStyleSheet("""
             QMainWindow {
-                background-color: #2c3e50;
+                background-color: #101820;
             }
         """)
         
@@ -122,18 +123,18 @@ class ChessBoard(QMainWindow):
         # Create the main layout with splitter for resizable panels
         self.central_widget = QWidget(self)
         self.setCentralWidget(self.central_widget)
-        self.central_widget.setStyleSheet("background-color: #2c3e50;")
+        self.central_widget.setStyleSheet(f"background-color: {theme.APP_BG};")
 
         main_layout = QHBoxLayout(self.central_widget)
-        main_layout.setContentsMargins(15, 15, 15, 15)
-        main_layout.setSpacing(15)
+        main_layout.setContentsMargins(18, 18, 18, 18)
+        main_layout.setSpacing(16)
 
         # Create a splitter for resizable sections
         self.main_splitter = QSplitter(Qt.Horizontal)
         self.main_splitter.setHandleWidth(2)
         self.main_splitter.setStyleSheet("""
             QSplitter::handle {
-                background-color: #455a64;
+                background-color: #314657;
             }
         """)
         main_layout.addWidget(self.main_splitter)
@@ -152,24 +153,29 @@ class ChessBoard(QMainWindow):
         board_container.setFrameShape(QFrame.StyledPanel)
         board_container.setStyleSheet("""
             QFrame {
-                background-color: #34495e;
-                border-radius: 10px;
-                padding: 15px;
-                border: 2px solid #455a64;
+                background-color: #17212B;
+                border-radius: 8px;
+                padding: 14px;
+                border: 1px solid #314657;
             }
         """)
         board_layout = QVBoxLayout(board_container)
 
         # ── Evaluation bar + board side by side ──────────────────────────
         board_row = QHBoxLayout()
-        board_row.setSpacing(6)
+        board_row.setSpacing(10)
 
         self.eval_bar = EvaluationBar()
         board_row.addWidget(self.eval_bar)
 
         # Create board widget with fixed size
         board_widget = QWidget()
-        board_widget.setStyleSheet("background-color: #455a64; padding: 5px; border-radius: 5px;")
+        board_widget.setStyleSheet("""
+            background-color: #263847;
+            padding: 6px;
+            border: 1px solid #314657;
+            border-radius: 8px;
+        """)
         
         from ui.board_layout_manager import SquareGridLayout
         self.board_layout = SquareGridLayout(board_widget)
@@ -184,7 +190,13 @@ class ChessBoard(QMainWindow):
         # Create coordinate labels and squares. Labels are updated when the board flips.
         self.file_labels = []
         self.rank_labels = []
-        label_style = "color: white; font-weight: bold; font-size: 12pt;"
+        label_style = f"""
+            color: {theme.TEXT_MUTED};
+            font-family: {theme.FONT_UI};
+            font-weight: 700;
+            font-size: 10pt;
+            background: transparent;
+        """
         for j in range(8):
             col_label = QLabel()
             col_label.setAlignment(Qt.AlignCenter)
@@ -225,9 +237,10 @@ class ChessBoard(QMainWindow):
         
         # Create right sidebar (existing code...)
         sidebar = QWidget()
-        sidebar.setMinimumWidth(250)
+        sidebar.setMinimumWidth(330)
+        sidebar.setStyleSheet(f"background-color: {theme.SURFACE};")
         sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setSpacing(15)
+        sidebar_layout.setSpacing(12)
         
         sidebar_splitter = QSplitter(Qt.Vertical)
         sidebar_layout.addWidget(sidebar_splitter)
@@ -241,27 +254,28 @@ class ChessBoard(QMainWindow):
         sidebar_splitter.setSizes([300, 300])
         
         # Connect control panel signals
-        self.control_panel.start_button.clicked.connect(self.start_game)
+        self.control_panel.start_button.clicked.connect(self.start_game)  # CHANGED
         if self.mode in ("human_ai", "human_human"):
-            self.control_panel.pause_button.clicked.connect(self.pause_human_ai_game)
+            self.control_panel.pause_button.clicked.connect(self.pause_human_ai_game)  # NEW
         else:
-            self.control_panel.pause_button.clicked.connect(self.pause_ai_game)
+            self.control_panel.pause_button.clicked.connect(self.pause_ai_game)  # EXISTING
         self.control_panel.reset_button.clicked.connect(self.reset_game)
         self.control_panel.home_button.clicked.connect(self.return_to_home)
         self.control_panel.save_button.clicked.connect(self.save_game)
         self.control_panel.flip_button.clicked.connect(self.toggle_board_orientation)
         self.control_panel.difficulty_combo.currentTextChanged.connect(self.update_ai_difficulty)
         
-        self.control_panel.start_button.setEnabled(True)
+        self.control_panel.start_button.setEnabled(True)   # CHANGED: Enable start button initially
         self.control_panel.pause_button.setEnabled(False)
         self.control_panel.depth_slider.valueChanged.connect(self.update_ai_depth)
         
         # Add to main splitter
         self.main_splitter.addWidget(game_area)
         self.main_splitter.addWidget(sidebar)
-        self.main_splitter.setSizes([800, 450])
-        self.main_splitter.setStretchFactor(0, 3)
-        self.main_splitter.setStretchFactor(1, 1)
+        # Điều chỉnh tỷ lệ cho fullscreen
+        self.main_splitter.setSizes([800, 450])  # THAY ĐỔI: board rộng hơn
+        self.main_splitter.setStretchFactor(0, 3)  # THÊM: game area co giãn nhiều hơn
+        self.main_splitter.setStretchFactor(1, 1)  # THÊM: sidebar co giãn ít hơn
 
 
         if self.mode == "human_ai":
@@ -269,8 +283,8 @@ class ChessBoard(QMainWindow):
             self.control_panel.start_button.show()
             self.control_panel.pause_button.show()
             
-            self.control_panel.start_button.setText("▶ Start Game")
-            self.control_panel.pause_button.setText("⏸ Pause Game")
+            self.control_panel.start_button.setText("Start Game")
+            self.control_panel.pause_button.setText("Pause Game")
             
             # Update the title
             for i in range(self.control_panel.widget().layout().count()):
@@ -281,8 +295,8 @@ class ChessBoard(QMainWindow):
                         break
         else:
             # AI vs AI mode
-            self.control_panel.start_button.setText("▶ Start AI Game")
-            self.control_panel.pause_button.setText("⏸ Pause AI Game")
+            self.control_panel.start_button.setText("Start AI Game")
+            self.control_panel.pause_button.setText("Pause AI Game")
         
         # Set initial status
         if self.mode == "human_ai":
@@ -300,7 +314,8 @@ class ChessBoard(QMainWindow):
         
         sys.excepthook = exception_hook
 
-        # Time selection is owned by app.py; the board only restores or renders state.
+        # CRITICAL FIX: Only show time dialog for NEW games from app.py
+        # Don't show any dialog here if load_game_data is provided
         if load_game_data:
             self.load_game_state(load_game_data)
         else:
@@ -800,19 +815,18 @@ class ChessBoard(QMainWindow):
     
     def initialize_piece_symbols(self):
         """Create enhanced chess piece symbols with better visibility and style"""
-        # Using filled/solid symbols for white pieces instead of outline versions
         piece_symbols = {
-            (chess.PAWN, chess.WHITE): "♟︎",    # Solid white pawn
+            (chess.PAWN, chess.WHITE): "♙",
             (chess.PAWN, chess.BLACK): "♟",     # Black pawn
-            (chess.KNIGHT, chess.WHITE): "♞︎",   # Solid white knight
+            (chess.KNIGHT, chess.WHITE): "♘",
             (chess.KNIGHT, chess.BLACK): "♞",    # Black knight
-            (chess.BISHOP, chess.WHITE): "♝︎",   # Solid white bishop
+            (chess.BISHOP, chess.WHITE): "♗",
             (chess.BISHOP, chess.BLACK): "♝",    # Black bishop
-            (chess.ROOK, chess.WHITE): "♜︎",     # Solid white rook
+            (chess.ROOK, chess.WHITE): "♖",
             (chess.ROOK, chess.BLACK): "♜",      # Black rook
-            (chess.QUEEN, chess.WHITE): "♛︎",    # Solid white queen
+            (chess.QUEEN, chess.WHITE): "♕",
             (chess.QUEEN, chess.BLACK): "♛",     # Black queen
-            (chess.KING, chess.WHITE): "♚︎",     # Solid white king
+            (chess.KING, chess.WHITE): "♔",
             (chess.KING, chess.BLACK): "♚",      # Black king
         }
         return piece_symbols
@@ -944,11 +958,20 @@ class ChessBoard(QMainWindow):
         settings = {
             "Easy": (2, 2500),
             "Medium": (4, 6000),
-            "Hard": (6, 12000),
+            "Hard": (8, 12000),
         }
         self.ai_difficulty = difficulty
         self.ai_depth, self.ai_time_limit_ms = settings.get(difficulty, settings["Medium"])
         self.update_status_panel()
+
+    def get_ai_search_limits(self):
+        """Return search depth and optional time limit for the current mode."""
+        depth = self.ai_depth
+        time_ms = self.ai_time_limit_ms
+        if not self.is_time_mode and self.ai_difficulty == "Hard":
+            depth = max(depth, 8)
+            time_ms = None
+        return depth, time_ms
     
     def start_ai_game(self):
         """Start AI vs AI game with timer support."""
@@ -1095,72 +1118,48 @@ class ChessBoard(QMainWindow):
         QTimer.singleShot(200, show_time_dialog_and_restart)
     
     def animate_piece_movement(self, from_pos, to_pos, piece_symbol, piece_color, capture=False, callback=None):
-        """Animate a piece between two board squares."""
-        from_square = self.squares[from_pos[0]][from_pos[1]]
-        to_square = self.squares[to_pos[0]][to_pos[1]]
-
-        from_top_left = from_square.mapTo(self.central_widget, QPoint(0, 0))
-        to_top_left = to_square.mapTo(self.central_widget, QPoint(0, 0))
-        from_rect = QRect(from_top_left, from_square.size())
-        to_rect = QRect(to_top_left, to_square.size())
-        font_size = max(28, int(min(from_rect.width(), from_rect.height()) * 0.68))
-
+        """Animate a piece moving from one square to another"""
+        # Create the animated piece (temporary overlay)
         animated_piece = AnimatedLabel(self.central_widget)
         animated_piece.setText(piece_symbol)
         animated_piece.setAlignment(Qt.AlignCenter)
         animated_piece.setStyleSheet(f"""
-            font-size: {font_size}px;
-            background-color: transparent;
+            font-size: 42px;
+            font-family: 'Segoe UI Symbol', 'Arial Unicode MS', sans-serif;
+            background-color: transparent; 
             color: {piece_color};
-            font-weight: bold;
+            font-weight: 800;
         """)
-        animated_piece.setGeometry(from_rect)
-
-        source_text = from_square.text()
-        target_text = to_square.text() if capture else None
-        from_square.setText("")
-        if capture:
-            to_square.setText("")
-
-        animated_piece.raise_()
+        animated_piece.setFixedSize(60, 60)
+        
+        # Position at the starting square
+        from_rect = self.squares[from_pos[0]][from_pos[1]].geometry()
+        global_from_pos = self.squares[from_pos[0]][from_pos[1]].mapTo(self.central_widget, QPoint(0, 0))
+        
+        animated_piece.move(global_from_pos)
         animated_piece.show()
-
-        animated_piece.animation.finished.connect(
-            lambda: self.finish_animation(
-                animated_piece,
-                callback,
-                from_square=from_square,
-                to_square=to_square,
-                source_text=source_text,
-                target_text=target_text,
-            )
-        )
-
+        
+        # Calculate the end position
+        global_to_pos = self.squares[to_pos[0]][to_pos[1]].mapTo(self.central_widget, QPoint(0, 0))
+        
+        # Set up animation
+        animated_piece.animation.finished.connect(lambda: self.finish_animation(animated_piece, callback))
+        
+        # Start the animation
+        animated_piece.move_to(global_to_pos)
+        
+        # Store the animated piece to prevent garbage collection
         self.animated_pieces[id(animated_piece)] = animated_piece
-        animated_piece.move_to(to_rect)
     
-    def finish_animation(
-        self,
-        animated_piece,
-        callback=None,
-        from_square=None,
-        to_square=None,
-        source_text=None,
-        target_text=None,
-    ):
-        """Clean up a movement overlay and continue the move flow."""
+    def finish_animation(self, animated_piece, callback=None):
+        """Clean up after animation is complete and call the callback"""
+        # Remove the animated piece from display and memory
         animated_piece.hide()
         self.animated_pieces.pop(id(animated_piece), None)
-        try:
-            if callback:
-                callback()
-            else:
-                if from_square is not None and source_text is not None:
-                    from_square.setText(source_text)
-                if to_square is not None and target_text is not None:
-                    to_square.setText(target_text)
-        finally:
-            animated_piece.deleteLater()
+        
+        # Call the callback if provided
+        if callback:
+            callback()
     
     def ai_vs_ai_step(self):
         """Execute a single step in the AI vs AI game with smart time management."""
@@ -1189,12 +1188,13 @@ class ChessBoard(QMainWindow):
                 # Use stored increment values
                 white_inc_ms = getattr(self, 'white_increment_ms', Config.DEFAULT_WHITE_INCREMENT_MS)
                 black_inc_ms = getattr(self, 'black_increment_ms', Config.DEFAULT_BLACK_INCREMENT_MS)
+                search_depth = self.ai_depth
                 max_time_ms = self.ai_time_limit_ms
             else:
                 # No time control - use fixed time
                 white_time_ms = black_time_ms = None
                 white_inc_ms = black_inc_ms = None
-                max_time_ms = self.ai_time_limit_ms
+                search_depth, max_time_ms = self.get_ai_search_limits()
             
             # Define callbacks
             def on_ai_move_ready(move_uci):
@@ -1214,7 +1214,7 @@ class ChessBoard(QMainWindow):
             # Start AI computation with smart time management
             self.ai_manager.compute_move(
                 board_fen=board_fen,
-                depth=self.ai_depth,
+                depth=search_depth,
                 time_ms=max_time_ms,
                 on_finished=on_ai_move_ready,
                 on_error=on_ai_error,
@@ -1230,18 +1230,10 @@ class ChessBoard(QMainWindow):
         self.ai_computation_active = False
         self.thinking_indicator.stop_thinking()
         
-        # Try to continue with a random move
-        legal_moves = list(self.board.legal_moves)
-        if legal_moves:
-            import random
-            move = random.choice(legal_moves)
-            self.handle_ai_move_result(move.uci())
-        else:
-            # No legal moves - game should be over
-            self.ai_game_running = False
-            if self.is_time_mode:
-                self.chess_timer.stop_timer()
-            self.thinking_indicator.show_status("No legal moves available")
+        self.ai_game_running = False
+        if self.is_time_mode:
+            self.chess_timer.stop_timer()
+        self.thinking_indicator.show_status("AI error - game paused")
     
     def handle_ai_move_result(self, best_move_uci):
         """Handle the result from the AI computation thread with timer support."""
@@ -1272,7 +1264,7 @@ class ChessBoard(QMainWindow):
                     self.thinking_indicator.show_status("Invalid move: No piece found")
                     return
                     
-                piece_color = "#FFFFFF" if piece.color == chess.WHITE else "#000000"
+                piece_color = theme.WHITE_PIECE if piece.color == chess.WHITE else theme.BLACK_PIECE
                 
                 # Determine piece symbol for animation
                 piece_symbol = self.piece_symbols.get((piece.piece_type, piece.color), "")
@@ -1405,6 +1397,20 @@ class ChessBoard(QMainWindow):
                 # Clamp về pawn units (1 pawn = 100 cp), giới hạn ±10 pawn
                 pawn_score = max(-10.0, min(10.0, score_white_pov / 100.0))
                 self.eval_bar.set_evaluation(pawn_score)
+                white_material = self._evaluator.get_material_info(chess.WHITE, self.board).material_score
+                black_material = self._evaluator.get_material_info(chess.BLACK, self.board).material_score
+                material_pawns = (white_material - black_material) / 100.0
+                material_text = (
+                    "even" if abs(material_pawns) < 0.05
+                    else f"White +{material_pawns:.1f}" if material_pawns > 0
+                    else f"Black +{abs(material_pawns):.1f}"
+                )
+                self.eval_bar.setToolTip(
+                    f"Static eval: {pawn_score:+.2f} pawns from White perspective\n"
+                    f"Material: {material_text}\n"
+                    f"Turn: {self.color_name(self.board.turn)}\n"
+                    f"FEN: {self.board.fen()}"
+                )
             else:
                 result = self.board.result()
                 self.eval_bar.set_evaluation(10.0 if result == "1-0" else
@@ -1421,7 +1427,6 @@ class ChessBoard(QMainWindow):
     def update_board(self):
         """Update the visual representation of the chess board"""
         self.update_coordinate_labels()
-        self._refresh_eval_and_captured()
         self.update_status_panel()
 
         selected = chess.parse_square(self.selected_square) if self.selected_square else None
@@ -1482,7 +1487,8 @@ class ChessBoard(QMainWindow):
                 # Draw piece or empty square
                 if piece:
                     symbol = self.piece_symbols.get((piece.piece_type, piece.color), "")
-                    piece_color = "#000000" if piece.color == chess.BLACK else "#FFFFFF"
+                    piece_color = theme.BLACK_PIECE if piece.color == chess.BLACK else theme.WHITE_PIECE
+                    square_widget.piece_color = piece_color
                     
                     # Ensure king is visible even when checked
                     square_widget.setText(symbol)
@@ -1491,21 +1497,25 @@ class ChessBoard(QMainWindow):
                     if square_widget.is_checked and piece.piece_type == chess.KING:
                         # Make king clearly visible against the check highlight
                         square_widget.setStyleSheet(square_widget.styleSheet() + f"""
-                            font-size: 40px; 
+                            font-size: 42px;
+                            font-family: 'Segoe UI Symbol', 'Arial Unicode MS', sans-serif;
                             color: {piece_color};
-                            font-weight: bold;
+                            font-weight: 800;
                             margin: 2px;
                             background-color: transparent;
                         """)
                     else:
                         square_widget.setStyleSheet(square_widget.styleSheet() + f"""
-                            font-size: 40px; 
+                            font-size: 42px;
+                            font-family: 'Segoe UI Symbol', 'Arial Unicode MS', sans-serif;
                             color: {piece_color};
-                            font-weight: bold;
+                            font-weight: 800;
                         """)
                 else:
+                    square_widget.piece_color = None
                     square_widget.setText("")
-                    
+
+        self._refresh_eval_and_captured()
 
 
         # Check for game over
@@ -1623,7 +1633,7 @@ class ChessBoard(QMainWindow):
                     
                     # Determine piece symbol for animation
                     piece_symbol = self.piece_symbols.get((piece.piece_type, piece.color), "")
-                    piece_color = "#FFFFFF" if piece.color == chess.WHITE else "#000000"
+                    piece_color = theme.WHITE_PIECE if piece.color == chess.WHITE else theme.BLACK_PIECE
                     is_capture = self.board.is_capture(move)
                     
                     # Reset selection
@@ -1735,12 +1745,13 @@ class ChessBoard(QMainWindow):
                 # Use stored increment values
                 white_inc_ms = getattr(self, 'white_increment_ms', Config.DEFAULT_WHITE_INCREMENT_MS)
                 black_inc_ms = getattr(self, 'black_increment_ms', Config.DEFAULT_BLACK_INCREMENT_MS)
+                search_depth = self.ai_depth
                 max_time_ms = self.ai_time_limit_ms
             else:
                 # No time control - use fixed time
                 white_time_ms = black_time_ms = None
                 white_inc_ms = black_inc_ms = None
-                max_time_ms = self.ai_time_limit_ms
+                search_depth, max_time_ms = self.get_ai_search_limits()
             
             # Define callbacks that will run on UI thread
             def on_ai_move_ready(move_uci):
@@ -1766,7 +1777,7 @@ class ChessBoard(QMainWindow):
             # Start AI computation with smart time management
             self.ai_manager.compute_move(
                 board_fen=board_fen,
-                depth=self.ai_depth,
+                depth=search_depth,
                 time_ms=max_time_ms,
                 on_finished=on_ai_move_ready,
                 on_error=on_ai_error,
@@ -1791,17 +1802,9 @@ class ChessBoard(QMainWindow):
         self.ai_computation_active = False
         self.thinking_indicator.stop_thinking()
         
-        # Don't crash the game - make a random legal move instead
-        legal_moves = list(self.board.legal_moves)
-        if legal_moves:
-            import random
-            move = random.choice(legal_moves)
-            # Simulate the move result
-            self.handle_human_ai_move_result(move.uci())
-        else:
-            self.thinking_indicator.show_status("No legal moves available")
-            if self.is_time_mode:
-                self.switch_timer_to_board_turn()
+        self.thinking_indicator.show_status("AI error - no move played")
+        if self.is_time_mode:
+            self.switch_timer_to_board_turn()
     
     def update_ai_progress(self, progress):
         """Update AI thinking progress (optional visual feedback)."""
@@ -1838,7 +1841,7 @@ class ChessBoard(QMainWindow):
                 
                 # Determine piece symbol and color for animation
                 piece_symbol = self.piece_symbols.get((piece.piece_type, piece.color), "")
-                piece_color = "#FFFFFF" if piece.color == chess.WHITE else "#000000"
+                piece_color = theme.WHITE_PIECE if piece.color == chess.WHITE else theme.BLACK_PIECE
                 is_capture = self.board.is_capture(move)
                 
                 # Check if move is castling

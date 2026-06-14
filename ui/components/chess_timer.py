@@ -1,137 +1,210 @@
-"""Chess clock widget with two synchronized player displays."""
+# Path: ui/components/chess_timer.py
+# Description:
+# Chess timer widget with Pygame-inspired HUD design.
+# Two side-by-side clocks with monospace font, active player highlighted with colored border.
+# Supports Fischer increment (time added after each move).
+# Color-coded time display: normal (white), warning (yellow under 60s), critical (red under 30s).
+# Emits time_expired signal when either player runs out of time.
 
+from PyQt5.QtWidgets import (
+    QWidget, QHBoxLayout, QVBoxLayout, QLabel, QFrame, QSizePolicy
+)
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
-from PyQt5.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
+from PyQt5.QtGui import QColor
+from ui import theme
 
-from ui.theme import MONO_FONT, color
+# ── Palette ────────────────────────────────────────────────────────────────
+BG_TIMER     = theme.SURFACE
+BORDER_CLR   = theme.BORDER
+ACTIVE_BDR   = theme.ACCENT
+INACTIVE_BDR = theme.BORDER_SOFT
+WHITE_CLR    = theme.BOARD_LIGHT
+BLACK_CLR    = theme.BOARD_DARK
+TEXT_MAIN    = theme.TEXT
+TEXT_DIM     = theme.TEXT_MUTED
+WARN_CLR     = theme.WARNING
+CRIT_CLR     = theme.DANGER
+_MONO        = theme.FONT_MONO
+# ───────────────────────────────────────────────────────────────────────────
 
 
 def _time_color(ms: int) -> str:
     if ms <= 30_000:
-        return color("danger")
+        return CRIT_CLR
     if ms <= 60_000:
-        return color("warning")
-    return color("text")
+        return WARN_CLR
+    return TEXT_MAIN
 
 
 class _PlayerClock(QFrame):
+    """
+    Đồng hồ của một người chơi — player label trên, thời gian lớn dưới.
+    """
+
     def __init__(self, player_label: str, accent: str, parent=None):
         super().__init__(parent)
         self.accent = accent
-        self.setFrameShape(QFrame.NoFrame)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.setFrameShape(QFrame.NoFrame)
+
+        self._active = False
+        self._apply_style(active=False)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 8, 10, 8)
         layout.setSpacing(2)
 
+        # Player label
         self._name_lbl = QLabel(player_label.upper())
         self._name_lbl.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self._name_lbl)
-
-        self._time_lbl = QLabel("00:00")
-        self._time_lbl.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self._time_lbl)
-
-        self.set_active(False)
-        self.set_time(0)
-
-    def set_time(self, ms: int):
-        self._time_lbl.setText(self._format_time(ms))
-        self._time_lbl.setStyleSheet(f"""
-            font-family: {MONO_FONT};
-            font-size: 28pt;
-            font-weight: bold;
-            color: {_time_color(ms)};
+        self._name_lbl.setStyleSheet(f"""
+            font-family: {_MONO};
+            font-size: 8pt;
+            font-weight: 700;
+            color: {TEXT_DIM};
+            letter-spacing: 0px;
             background: transparent;
             border: none;
+        """)
+        layout.addWidget(self._name_lbl)
+
+        # Time display
+        self._time_lbl = QLabel("00:00")
+        self._time_lbl.setAlignment(Qt.AlignCenter)
+        self._time_lbl.setStyleSheet(f"""
+            font-family: {_MONO};
+            font-size: 27pt;
+            font-weight: 800;
+            color: {TEXT_MAIN};
+            background: transparent;
+            border: none;
+            letter-spacing: 0px;
+        """)
+        layout.addWidget(self._time_lbl)
+
+    def set_time(self, ms: int):
+        self._time_lbl.setText(self._fmt(ms))
+        color = _time_color(ms)
+        self._time_lbl.setStyleSheet(f"""
+            font-family: {_MONO};
+            font-size: 27pt;
+            font-weight: 800;
+            color: {color};
+            background: transparent;
+            border: none;
+            letter-spacing: 0px;
         """)
 
     def set_active(self, active: bool):
-        border = self.accent if active else color("border")
-        background = color("surface_alt") if active else color("panel")
-        name_color = self.accent if active else color("muted")
-        self.setStyleSheet(f"""
-            QFrame {{
-                background-color: {background};
-                border: 2px solid {border};
-                border-radius: 4px;
-            }}
-        """)
-        self._name_lbl.setStyleSheet(f"""
-            font-family: {MONO_FONT};
-            font-size: 8pt;
-            font-weight: bold;
-            color: {name_color};
-            background: transparent;
-            border: none;
-        """)
+        self._active = active
+        self._apply_style(active)
+        if active:
+            self._name_lbl.setStyleSheet(f"""
+                font-family: {_MONO};
+                font-size: 8pt;
+                font-weight: 700;
+                color: {self.accent};
+                letter-spacing: 0px;
+                background: transparent;
+                border: none;
+            """)
+        else:
+            self._name_lbl.setStyleSheet(f"""
+                font-family: {_MONO};
+                font-size: 8pt;
+                font-weight: 700;
+                color: {TEXT_DIM};
+                letter-spacing: 0px;
+                background: transparent;
+                border: none;
+            """)
 
     def set_name(self, name: str):
         self._name_lbl.setText(name.upper())
 
-    @staticmethod
-    def _format_time(ms: int) -> str:
-        total_seconds = ms // 1000
-        minutes, seconds = divmod(total_seconds, 60)
-        return f"{minutes:02d}:{seconds:02d}"
-
-
-class ChessTimer(QWidget):
-    """Public timer API used by the board controller."""
-
-    time_expired = pyqtSignal(str)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setFixedHeight(80)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+    # ── internals ──────────────────────────────────────────────────────────
+    def _apply_style(self, active: bool):
+        bdr = self.accent if active else INACTIVE_BDR
+        bg  = theme.SURFACE_2 if active else BG_TIMER
         self.setStyleSheet(f"""
-            QWidget {{
-                background-color: {color("panel")};
-                border-bottom: 1px solid {color("border")};
+            QFrame {{
+                background-color: {bg};
+                border: 2px solid {bdr};
+                border-radius: 8px;
             }}
         """)
 
-        self.white_time_ms = 0
-        self.black_time_ms = 0
-        self.active_player = None
-        self.is_paused = True
-        self.is_time_mode = False
+    @staticmethod
+    def _fmt(ms: int) -> str:
+        total_s = ms // 1000
+        m, s = divmod(total_s, 60)
+        return f"{m:02d}:{s:02d}"
 
+
+class ChessTimer(QWidget):
+    """
+    Timer widget kiểu Pygame HUD — hai đồng hồ cạnh nhau, nền tối.
+    API tương thích với code gốc.
+    """
+
+    time_expired = pyqtSignal(str)   # 'white' | 'black'
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setFixedHeight(80)
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {BG_TIMER};
+                border: none;
+            }}
+        """)
+
+        # Timer state
+        self.white_time_ms  = 0
+        self.black_time_ms  = 0
+        self.active_player  = None
+        self.is_paused      = True
+        self.is_time_mode   = False
+
+        # Internal 100 ms tick
         self._tick = QTimer(self)
-        self._tick.setInterval(100)
         self._tick.timeout.connect(self._on_tick)
+        self._tick.setInterval(100)
 
         self._build_ui()
         self.hide()
 
+    # ── UI ─────────────────────────────────────────────────────────────────
     def _build_ui(self):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(1)
+        layout.setSpacing(8)
 
-        self.white_clock = _PlayerClock("White", color("light_square"))
-        self.black_clock = _PlayerClock("Black", color("dark_square"))
+        self.white_clock = _PlayerClock("White", WHITE_CLR)
+        self.black_clock = _PlayerClock("Black", BLACK_CLR)
+
         layout.addWidget(self.white_clock)
 
-        separator = QFrame()
-        separator.setFrameShape(QFrame.VLine)
-        separator.setStyleSheet(f"color: {color('border')}; max-width: 1px;")
-        layout.addWidget(separator)
+        # Separator
+        sep = QFrame()
+        sep.setFrameShape(QFrame.VLine)
+        sep.setStyleSheet(f"color: {BORDER_CLR}; max-width: 1px;")
+        layout.addWidget(sep)
+
         layout.addWidget(self.black_clock)
 
+    # ── Public API (backward-compatible) ────────────────────────────────────
     def set_time_mode(self, enabled: bool, white_time_ms=0, black_time_ms=0):
         self.is_time_mode = enabled
-        if not enabled:
+        if enabled:
+            self.white_time_ms = white_time_ms
+            self.black_time_ms = black_time_ms
+            self._refresh_displays()
+            self.show()
+        else:
             self.stop_timer()
             self.hide()
-            return
-
-        self.white_time_ms = white_time_ms
-        self.black_time_ms = black_time_ms
-        self._refresh_displays()
-        self.show()
 
     def start_timer(self, player: str):
         if not self.is_time_mode:
@@ -155,23 +228,29 @@ class ChessTimer(QWidget):
         if self.is_time_mode and self.active_player:
             self.is_paused = False
 
-    def switch_timer_to_player(self, player: str, apply_increment=False, increment_ms=0):
+    def switch_timer_to_player(self, player: str,
+                               apply_increment=False, increment_ms=0):
         if not self.is_time_mode:
             return
         if apply_increment and increment_ms and self.active_player:
             self.add_increment(self.active_player, increment_ms)
         self.active_player = player
         self._update_active_display()
-
+    
+    # THÊM PHƯƠNG THỨC switch_player (alias cho switch_timer_to_player)
     def switch_player(self, player: str):
+        """
+        Switch the active timer to the specified player.
+        Alias for switch_timer_to_player for compatibility.
+        """
         self.switch_timer_to_player(player)
 
     def add_increment(self, player: str, increment_ms: int):
         if not self.is_time_mode:
             return
-        if player == "white":
+        if player == 'white':
             self.white_time_ms += increment_ms
-        elif player == "black":
+        elif player == 'black':
             self.black_time_ms += increment_ms
         self._refresh_displays()
 
@@ -182,19 +261,19 @@ class ChessTimer(QWidget):
         self.white_clock.set_name(white_name)
         self.black_clock.set_name(black_name)
 
+    # ── Internals ──────────────────────────────────────────────────────────
     def _on_tick(self):
         if self.is_paused or not self.active_player:
             return
-
-        if self.active_player == "white":
+        if self.active_player == 'white':
             self.white_time_ms = max(0, self.white_time_ms - 100)
             if self.white_time_ms == 0:
-                self.time_expired.emit("white")
+                self.time_expired.emit('white')
                 self.stop_timer()
         else:
             self.black_time_ms = max(0, self.black_time_ms - 100)
             if self.black_time_ms == 0:
-                self.time_expired.emit("black")
+                self.time_expired.emit('black')
                 self.stop_timer()
         self._refresh_displays()
 
@@ -203,9 +282,10 @@ class ChessTimer(QWidget):
         self.black_clock.set_time(self.black_time_ms)
 
     def _update_active_display(self):
-        self.white_clock.set_active(self.active_player == "white")
-        self.black_clock.set_active(self.active_player == "black")
+        self.white_clock.set_active(self.active_player == 'white')
+        self.black_clock.set_active(self.active_player == 'black')
 
+    # Legacy alias kept for compatibility
     def update_display(self):
         self._refresh_displays()
 

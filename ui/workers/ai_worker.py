@@ -42,7 +42,10 @@ def ai_worker_process(board_fen, depth, time_ms, result_queue, cancel_event,
             return
         
         # Calculate optimal thinking time if time control parameters provided
-        if all(param is not None for param in [white_time_ms, black_time_ms, white_inc_ms, black_inc_ms]):
+        if time_ms is None:
+            actual_time_ms = None
+            print("No time limit: searching to configured depth")
+        elif all(param is not None for param in [white_time_ms, black_time_ms, white_inc_ms, black_inc_ms]):
             optimal_time = worker_bot.choose_think_time(
                 white_time_ms, black_time_ms, white_inc_ms, black_inc_ms
             )
@@ -83,7 +86,7 @@ class MultiprocessAIWorker(QThread):
     error = pyqtSignal(str)     # Error message
     progress = pyqtSignal(int)  # Progress 0-100
     
-    def __init__(self, board_fen, depth, time_ms=10000, 
+    def __init__(self, board_fen, depth, time_ms=10000,
                  white_time_ms=None, black_time_ms=None, white_inc_ms=None, black_inc_ms=None, parent=None):
         super().__init__(parent)
         self.board_fen = board_fen
@@ -121,7 +124,7 @@ class MultiprocessAIWorker(QThread):
             
             # Monitor process with progress updates
             start_time = time.time()
-            timeout = (self.time_ms / 1000.0) + 10  # Add 10 second buffer
+            timeout = None if self.time_ms is None else (self.time_ms / 1000.0) + 10  # Add 10 second buffer
             
             while self.ai_process.is_alive():
                 if self._cancelled:
@@ -135,13 +138,13 @@ class MultiprocessAIWorker(QThread):
                 
                 # Update progress based on elapsed time
                 elapsed = time.time() - start_time
-                progress = min(90, 20 + int((elapsed / timeout) * 70))
+                progress = 20 if timeout is None else min(90, 20 + int((elapsed / timeout) * 70))
                 self.progress.emit(progress)
                 
                 time.sleep(0.1)  # Check every 100ms
                 
                 # Timeout check
-                if elapsed > timeout:
+                if timeout is not None and elapsed > timeout:
                     self.cancel_event.set()
                     self.ai_process.terminate()
                     self.ai_process.join(timeout=2)
@@ -160,7 +163,10 @@ class MultiprocessAIWorker(QThread):
                     move = result.get("move", "")
                     time_taken = result.get("time_taken", 0)
                     time_allocated = result.get("time_allocated", self.time_ms)
-                    print(f"AI found move: {move} (took {time_taken:.2f}s of {time_allocated/1000:.1f}s allocated)")
+                    if time_allocated is None:
+                        print(f"AI found move: {move} (took {time_taken:.2f}s, no time limit)")
+                    else:
+                        print(f"AI found move: {move} (took {time_taken:.2f}s of {time_allocated/1000:.1f}s allocated)")
                     self.finished.emit(move or "")
                 elif result["status"] == "error":
                     self.error.emit(result.get("error", "Unknown AI error"))

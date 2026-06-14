@@ -13,21 +13,22 @@ from PyQt5.QtCore import Qt, pyqtSignal, QSize
 from PyQt5.QtGui import QColor, QFont, QPainter, QBrush
 
 from utils.config import Config
+from ui import theme
 
 # ── Palette ────────────────────────────────────────────────────────────────
-BG_DARK    = "#141414"
-PANEL_BG   = "#1E1E1E"
-BORDER_CLR = "#383838"
-ACCENT_GRN = "#769656"
-ACCENT_RED = "#C1392B"
-ACCENT_BLU = "#2E86C1"
-TEXT_MAIN  = "#EFEFEF"
-TEXT_DIM   = "#888888"
-INPUT_BG   = "#2A2A2A"
-INPUT_BDR  = "#444444"
+BG_DARK    = theme.APP_BG
+PANEL_BG   = theme.SURFACE
+BORDER_CLR = theme.BORDER
+ACCENT_GRN = theme.ACCENT
+ACCENT_RED = theme.DANGER
+ACCENT_BLU = theme.ACCENT_BLUE
+TEXT_MAIN  = theme.TEXT
+TEXT_DIM   = theme.TEXT_MUTED
+INPUT_BG   = theme.SURFACE_2
+INPUT_BDR  = theme.BORDER
 # ───────────────────────────────────────────────────────────────────────────
 
-_MONO = "'Courier New', monospace"
+_MONO = theme.FONT_UI
 
 def _dlg_style():
     return f"""
@@ -43,7 +44,7 @@ def _dlg_style():
             background-color: {INPUT_BG};
             color: {TEXT_MAIN};
             border: 1px solid {INPUT_BDR};
-            border-radius: 2px;
+            border-radius: 6px;
             font-family: {_MONO};
             font-size: 10pt;
             padding: 4px 6px;
@@ -64,11 +65,11 @@ def _btn(text, bg, hover=None, min_w=120):
             color: {TEXT_MAIN};
             font-family: {_MONO};
             font-size: 10pt;
-            font-weight: bold;
+            font-weight: 700;
             border: 1px solid {QColor(bg).lighter(130).name()};
-            border-radius: 2px;
+            border-radius: 6px;
             padding: 4px 12px;
-            letter-spacing: 0.5px;
+            letter-spacing: 0px;
         }}
         QPushButton:hover {{ background-color: {hover}; }}
         QPushButton:pressed {{ background-color: {pressed}; }}
@@ -129,7 +130,7 @@ class BaseDialog(QDialog):
         tbl.addWidget(self.title_label)
         tbl.addStretch()
 
-        close_btn = QPushButton("✕")
+        close_btn = QPushButton("×")
         close_btn.setFixedSize(24, 24)
         close_btn.setCursor(Qt.PointingHandCursor)
         close_btn.setStyleSheet(f"""
@@ -385,9 +386,9 @@ class GameOverPopup(QDialog):
         bfl.setContentsMargins(16, 10, 16, 10)
         bfl.setSpacing(10)
 
-        play_btn = _btn("▶ PLAY AGAIN", ACCENT_GRN)
+        play_btn = _btn("Play Again", ACCENT_GRN)
         play_btn.clicked.connect(self._play_again)
-        home_btn = _btn("⌂ HOME", "#3A3A3A")
+        home_btn = _btn("Home", theme.SURFACE_3)
         home_btn.clicked.connect(self._return_home)
         bfl.addWidget(play_btn)
         bfl.addWidget(home_btn)
@@ -447,20 +448,20 @@ class StartScreen(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Chess Game")
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
-        self.setFixedSize(480, 640)
+        self.setFixedSize(500, 640)
         self.setStyleSheet(f"background-color: {BG_DARK};")
         self._mode = None
         self._player_color = "white"
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(40, 40, 40, 40)
+        layout.setContentsMargins(42, 38, 42, 34)
         layout.setSpacing(0)
 
         # ── Chess board icon (ASCII) ────────────────────────────────────────
         icon_lbl = QLabel("♛")
         icon_lbl.setAlignment(Qt.AlignCenter)
         icon_lbl.setStyleSheet(f"""
-            font-size: 64pt;
+            font-size: 62pt;
             color: {ACCENT_GRN};
             padding: 0px;
             margin: 0px;
@@ -472,10 +473,10 @@ class StartScreen(QDialog):
         title_lbl.setAlignment(Qt.AlignCenter)
         title_lbl.setStyleSheet(f"""
             font-family: {_MONO};
-            font-size: 36pt;
-            font-weight: bold;
+            font-size: 34pt;
+            font-weight: 900;
             color: {TEXT_MAIN};
-            letter-spacing: 8px;
+            letter-spacing: 0px;
             padding: 0px;
             margin: 0px;
         """)
@@ -487,7 +488,7 @@ class StartScreen(QDialog):
             font-family: {_MONO};
             font-size: 8pt;
             color: {TEXT_DIM};
-            letter-spacing: 3px;
+            letter-spacing: 0px;
             padding-bottom: 32px;
         """)
         layout.addWidget(sub_lbl)
@@ -499,7 +500,7 @@ class StartScreen(QDialog):
             font-family: {_MONO};
             font-size: 8pt;
             color: {TEXT_DIM};
-            letter-spacing: 3px;
+            letter-spacing: 0px;
             padding-bottom: 8px;
         """)
         layout.addWidget(mode_lbl)
@@ -514,9 +515,10 @@ class StartScreen(QDialog):
                 color: {TEXT_MAIN};
                 font-family: {_MONO};
                 font-size: 14pt;
-                font-weight: bold;
+                font-weight: 800;
                 border: none;
-                letter-spacing: 1px;
+                border-radius: 8px;
+                letter-spacing: 0px;
             }}
             QPushButton:hover {{
                 background-color: {QColor(ACCENT_GRN).lighter(115).name()};
@@ -536,19 +538,20 @@ class StartScreen(QDialog):
         ai_btn.setFixedHeight(56)
         ai_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #2A3A4A;
+                background-color: {theme.ACCENT_BLUE};
                 color: {TEXT_MAIN};
                 font-family: {_MONO};
                 font-size: 14pt;
-                font-weight: bold;
-                border: 1px solid #3A5A7A;
-                letter-spacing: 1px;
+                font-weight: 800;
+                border: 1px solid {theme.lighten(theme.ACCENT_BLUE, 122)};
+                border-radius: 8px;
+                letter-spacing: 0px;
             }}
             QPushButton:hover {{
-                background-color: #344A5A;
+                background-color: {theme.lighten(theme.ACCENT_BLUE, 112)};
             }}
             QPushButton:pressed {{
-                background-color: #1A2A3A;
+                background-color: {theme.darken(theme.ACCENT_BLUE, 115)};
             }}
         """)
         ai_btn.clicked.connect(lambda: self._select("ai_ai"))
@@ -561,19 +564,20 @@ class StartScreen(QDialog):
         hvh_btn.setFixedHeight(46)
         hvh_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #3A3A3A;
+                background-color: {theme.SURFACE_3};
                 color: {TEXT_MAIN};
                 font-family: {_MONO};
                 font-size: 12pt;
-                font-weight: bold;
-                border: 1px solid #555555;
-                letter-spacing: 1px;
+                font-weight: 800;
+                border: 1px solid {theme.BORDER};
+                border-radius: 8px;
+                letter-spacing: 0px;
             }}
             QPushButton:hover {{
-                background-color: #4A4A4A;
+                background-color: {theme.lighten(theme.SURFACE_3, 112)};
             }}
             QPushButton:pressed {{
-                background-color: #2A2A2A;
+                background-color: {theme.SURFACE_2};
             }}
         """)
         hvh_btn.clicked.connect(lambda: self._select("human_human"))
@@ -587,7 +591,7 @@ class StartScreen(QDialog):
             font-family: {_MONO};
             font-size: 8pt;
             color: {TEXT_DIM};
-            letter-spacing: 3px;
+            letter-spacing: 0px;
             padding-bottom: 6px;
         """)
         layout.addWidget(color_lbl)
@@ -609,7 +613,7 @@ class StartScreen(QDialog):
         layout.addSpacing(8)
 
         # ── Load game ──────────────────────────────────────────────────────
-        self.load_game_button = QPushButton("📂  LOAD SAVED GAME")
+        self.load_game_button = QPushButton("Load Saved Game")
         self.load_game_button.setCursor(Qt.PointingHandCursor)
         self.load_game_button.setFixedHeight(38)
         self.load_game_button.setStyleSheet(f"""
@@ -618,12 +622,14 @@ class StartScreen(QDialog):
                 color: {TEXT_DIM};
                 font-family: {_MONO};
                 font-size: 10pt;
+                font-weight: 700;
                 border: 1px solid {BORDER_CLR};
-                letter-spacing: 1px;
+                border-radius: 8px;
+                letter-spacing: 0px;
             }}
             QPushButton:hover {{
                 color: {TEXT_MAIN};
-                border-color: #555555;
+                border-color: {ACCENT_GRN};
             }}
         """)
         layout.addWidget(self.load_game_button)

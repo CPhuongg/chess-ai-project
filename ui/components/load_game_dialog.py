@@ -16,19 +16,20 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor
+from ui import theme
 
 # ── Palette ────────────────────────────────────────────────────────────────
-BG_DARK    = "#141414"
-PANEL_BG   = "#1E1E1E"
-PANEL2     = "#242424"
-BORDER_CLR = "#383838"
-ACCENT_GRN = "#769656"
-ACCENT_RED = "#C1392B"
-TEXT_MAIN  = "#EFEFEF"
-TEXT_DIM   = "#888888"
-LIST_BG    = "#1A1A1A"
-LIST_SEL   = "#2A3A2A"
-_MONO      = "'Courier New', monospace"
+BG_DARK    = theme.APP_BG
+PANEL_BG   = theme.SURFACE
+PANEL2     = theme.SURFACE_2
+BORDER_CLR = theme.BORDER
+ACCENT_GRN = theme.ACCENT
+ACCENT_RED = theme.DANGER
+TEXT_MAIN  = theme.TEXT
+TEXT_DIM   = theme.TEXT_MUTED
+LIST_BG    = theme.APP_BG
+LIST_SEL   = theme.SURFACE_3
+_MONO      = theme.FONT_UI
 # ───────────────────────────────────────────────────────────────────────────
 
 
@@ -38,7 +39,7 @@ def _section(text):
         font-family: {_MONO};
         font-size: 8pt;
         color: {TEXT_DIM};
-        letter-spacing: 2px;
+        letter-spacing: 0px;
         padding: 4px 0px 2px 0px;
         background: transparent;
     """)
@@ -81,11 +82,11 @@ class LoadGameDialog(QDialog):
             font-size: 10pt;
             font-weight: bold;
             color: {ACCENT_GRN};
-            letter-spacing: 2px;
+            letter-spacing: 0px;
         """)
         tbl.addWidget(lbl)
         tbl.addStretch()
-        close_btn = QPushButton("✕")
+        close_btn = QPushButton("×")
         close_btn.setFixedSize(24, 24)
         close_btn.setCursor(Qt.PointingHandCursor)
         close_btn.setStyleSheet(f"""
@@ -111,7 +112,7 @@ class LoadGameDialog(QDialog):
         browse_row = QHBoxLayout()
         browse_row.addWidget(_section("file"))
         browse_row.addStretch()
-        browse_btn = QPushButton("📂  BROWSE...")
+        browse_btn = QPushButton("Browse...")
         browse_btn.setFixedHeight(28)
         browse_btn.setCursor(Qt.PointingHandCursor)
         browse_btn.setStyleSheet(f"""
@@ -121,10 +122,10 @@ class LoadGameDialog(QDialog):
                 color: {TEXT_DIM};
                 background: transparent;
                 border: 1px solid {BORDER_CLR};
-                border-radius: 2px;
+                border-radius: 6px;
                 padding: 2px 10px;
             }}
-            QPushButton:hover {{ color: {TEXT_MAIN}; border-color: #555; }}
+            QPushButton:hover {{ color: {TEXT_MAIN}; border-color: {ACCENT_GRN}; }}
         """)
         browse_btn.clicked.connect(self._browse)
         browse_row.addWidget(browse_btn)
@@ -189,7 +190,7 @@ class LoadGameDialog(QDialog):
         bfl.setContentsMargins(16, 8, 16, 8)
         bfl.setSpacing(8)
 
-        self.load_btn = QPushButton("▶  LOAD GAME")
+        self.load_btn = QPushButton("Load Game")
         self.load_btn.setFixedHeight(34)
         self.load_btn.setEnabled(False)
         self.load_btn.setCursor(Qt.PointingHandCursor)
@@ -201,12 +202,12 @@ class LoadGameDialog(QDialog):
                 color: {TEXT_MAIN};
                 background-color: {ACCENT_GRN};
                 border: none;
-                border-radius: 2px;
+                border-radius: 6px;
                 padding: 4px 16px;
-                letter-spacing: 1px;
+                letter-spacing: 0px;
             }}
             QPushButton:hover {{ background-color: {QColor(ACCENT_GRN).lighter(115).name()}; }}
-            QPushButton:disabled {{ background-color: #2A3A2A; color: #555; }}
+            QPushButton:disabled {{ background-color: {theme.SURFACE_2}; color: {theme.TEXT_DIM}; }}
         """)
         self.load_btn.clicked.connect(self._load_selected)
 
@@ -221,10 +222,10 @@ class LoadGameDialog(QDialog):
                 color: {TEXT_DIM};
                 background: transparent;
                 border: 1px solid {BORDER_CLR};
-                border-radius: 2px;
+                border-radius: 6px;
                 padding: 4px 16px;
             }}
-            QPushButton:hover {{ color: {TEXT_MAIN}; border-color: #555; }}
+            QPushButton:hover {{ color: {TEXT_MAIN}; border-color: {ACCENT_GRN}; }}
         """)
         cancel_btn.clicked.connect(self.reject)
 
