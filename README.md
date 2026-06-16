@@ -7,7 +7,7 @@
 ### Tính năng chính:
 - Chế độ Người vs AI với độ khó có thể điều chỉnh
 - Chế độ AI vs AI để quan sát hai engine cờ vua thi đấu
-- Chế độ người với người
+- Chế độ Người với Người
 - Hệ thống quản lý thời gian linh hoạt với tăng thời gian
 - AI sử dụng thuật toán minimax với alpha-beta pruning
 - Giao diện đồ họa hiện đại với hiệu ứng animation
