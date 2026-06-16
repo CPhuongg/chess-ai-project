@@ -1,0 +1,114 @@
+{
+  "bullet": [
+    {
+      "id": "bullet_1_0",
+      "category": "bullet",
+      "base_seconds": 60,
+      "increment_seconds": 0,
+      "cutechess_tc": "60+0",
+      "display_name": "Bullet 1+0"
+    },
+    {
+      "id": "bullet_1_1",
+      "category": "bullet",
+      "base_seconds": 60,
+      "increment_seconds": 1,
+      "cutechess_tc": "60+1",
+      "display_name": "Bullet 1+1"
+    },
+    {
+      "id": "bullet_2_1",
+      "category": "bullet",
+      "base_seconds": 120,
+      "increment_seconds": 1,
+      "cutechess_tc": "120+1",
+      "display_name": "Bullet 2+1"
+    }
+  ],
+  "blitz": [
+    {
+      "id": "blitz_3_0",
+      "category": "blitz",
+      "base_seconds": 180,
+      "increment_seconds": 0,
+      "cutechess_tc": "180+0",
+      "display_name": "Blitz 3+0"
+    },
+    {
+      "id": "blitz_3_2",
+      "category": "blitz",
+      "base_seconds": 180,
+      "increment_seconds": 2,
+      "cutechess_tc": "180+2",
+      "display_name": "Blitz 3+2"
+    },
+    {
+      "id": "blitz_5_0",
+      "category": "blitz",
+      "base_seconds": 300,
+      "increment_seconds": 0,
+      "cutechess_tc": "300+0",
+      "display_name": "Blitz 5+0"
+    },
+    {
+      "id": "blitz_5_3",
+      "category": "blitz",
+      "base_seconds": 300,
+      "increment_seconds": 3,
+      "cutechess_tc": "300+3",
+      "display_name": "Blitz 5+3"
+    }
+  ],
+  "rapid": [
+    {
+      "id": "rapid_10_0",
+      "category": "rapid",
+      "base_seconds": 600,
+      "increment_seconds": 0,
+      "cutechess_tc": "600+0",
+      "display_name": "Rapid 10+0"
+    },
+    {
+      "id": "rapid_10_5",
+      "category": "rapid",
+      "base_seconds": 600,
+      "increment_seconds": 5,
+      "cutechess_tc": "600+5",
+      "display_name": "Rapid 10+5"
+    },
+    {
+      "id": "rapid_15_10",
+      "category": "rapid",
+      "base_seconds": 900,
+      "increment_seconds": 10,
+      "cutechess_tc": "900+10",
+      "display_name": "Rapid 15+10"
+    }
+  ],
+  "classical": [
+    {
+      "id": "classical_30_0",
+      "category": "classical",
+      "base_seconds": 1800,
+      "increment_seconds": 0,
+      "cutechess_tc": "1800+0",
+      "display_name": "Classical 30+0"
+    },
+    {
+      "id": "classical_30_20",
+      "category": "classical",
+      "base_seconds": 1800,
+      "increment_seconds": 20,
+      "cutechess_tc": "1800+20",
+      "display_name": "Classical 30+20"
+    },
+    {
+      "id": "classical_60_0",
+      "category": "classical",
+      "base_seconds": 3600,
+      "increment_seconds": 0,
+      "cutechess_tc": "3600+0",
+      "display_name": "Classical 60+0"
+    }
+  ]
+}
