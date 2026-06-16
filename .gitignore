@@ -7,3 +7,12 @@ __pycache__/
 .DS_Store
 
 logs/
+# Chess Elo testing artifacts
+engines/stockfish/stockfish.exe
+tools/cutechess/
+results/
+*_out.txt
+*_err.txt
+cute_match_*.txt
+stockfish_*.txt
+myai_*.txt

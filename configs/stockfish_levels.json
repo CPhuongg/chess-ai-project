@@ -1,42 +1,14 @@
 [
   {
-    "id": "stockfish_800",
-    "name": "Stockfish 800",
+    "id": "stockfish_1320",
+    "name": "Stockfish 1320",
     "type": "uci",
     "cmd": "engines/stockfish/stockfish.exe",
     "proto": "uci",
-    "elo": 800,
+    "elo": 1320,
     "options": {
       "UCI_LimitStrength": "true",
-      "UCI_Elo": "800",
-      "Threads": "1",
-      "Hash": "64"
-    }
-  },
-  {
-    "id": "stockfish_1000",
-    "name": "Stockfish 1000",
-    "type": "uci",
-    "cmd": "engines/stockfish/stockfish.exe",
-    "proto": "uci",
-    "elo": 1000,
-    "options": {
-      "UCI_LimitStrength": "true",
-      "UCI_Elo": "1000",
-      "Threads": "1",
-      "Hash": "64"
-    }
-  },
-  {
-    "id": "stockfish_1200",
-    "name": "Stockfish 1200",
-    "type": "uci",
-    "cmd": "engines/stockfish/stockfish.exe",
-    "proto": "uci",
-    "elo": 1200,
-    "options": {
-      "UCI_LimitStrength": "true",
-      "UCI_Elo": "1200",
+      "UCI_Elo": "1320",
       "Threads": "1",
       "Hash": "64"
     }
@@ -93,6 +65,34 @@
     "options": {
       "UCI_LimitStrength": "true",
       "UCI_Elo": "2000",
+      "Threads": "1",
+      "Hash": "64"
+    }
+  },
+  {
+    "id": "stockfish_2200",
+    "name": "Stockfish 2200",
+    "type": "uci",
+    "cmd": "engines/stockfish/stockfish.exe",
+    "proto": "uci",
+    "elo": 2200,
+    "options": {
+      "UCI_LimitStrength": "true",
+      "UCI_Elo": "2200",
+      "Threads": "1",
+      "Hash": "64"
+    }
+  },
+  {
+    "id": "stockfish_2400",
+    "name": "Stockfish 2400",
+    "type": "uci",
+    "cmd": "engines/stockfish/stockfish.exe",
+    "proto": "uci",
+    "elo": 2400,
+    "options": {
+      "UCI_LimitStrength": "true",
+      "UCI_Elo": "2400",
       "Threads": "1",
       "Hash": "64"
     }
