@@ -440,7 +440,6 @@ class ChessBoard(QMainWindow):
     def switch_timer_to_board_turn(self):
         if self.is_time_mode:
             self.chess_timer.switch_player("white" if self.board.turn == chess.WHITE else "black")
-
     
     def setup_time_mode(self, enabled, white_time_ms, black_time_ms, white_inc_ms=3000, black_inc_ms=3000):
         """Setup time mode with specified settings including increments."""
@@ -466,9 +465,7 @@ class ChessBoard(QMainWindow):
                 self.chess_timer.set_player_names("AI 1 (White)", "AI 2 (Black)")
         
         self.chess_timer.set_time_mode(enabled, white_time_ms, black_time_ms)
-        
-
-    
+            
     def on_time_expired(self, player):
         """Handle when a player's time expires."""
         self.chess_timer.stop_timer()
@@ -569,7 +566,6 @@ class ChessBoard(QMainWindow):
         self.thinking_indicator.stop_thinking()
         self.thinking_indicator.show_status("Game paused")
 
-    
     def start_player_timer(self, player):
         """Start the timer for a specific player."""
         if self.is_time_mode:
@@ -995,10 +991,6 @@ class ChessBoard(QMainWindow):
         self.control_panel.pause_button.setEnabled(False)
         self.thinking_indicator.show_status("Game paused")
         self.update_status_panel()
-    
-    # Updated reset_game method to prevent double time dialog
-
-    # Replace the existing reset_game method in ui/board.py:
 
     def reset_game(self):
         """Reset the game to initial state - with proper time dialog handling."""
@@ -1783,7 +1775,6 @@ class ChessBoard(QMainWindow):
             self.thinking_indicator.stop_thinking()
             self.ai_computation_active = False
             self.thinking_indicator.show_status(f"Error starting AI move: {str(e)}")
-
         
     def handle_ai_error(self, error_message):
         """Handle AI computation errors without crashing the game."""
@@ -2041,7 +2032,6 @@ class ChessBoard(QMainWindow):
         
         # Apply the new sizes
         self.main_splitter.setSizes([board_portion, sidebar_portion])
-
     
     def setup_undo_button(self):
         """Set up the undo button and resign button - call this method from __init__"""

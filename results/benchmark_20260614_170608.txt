@@ -1,0 +1,64 @@
+Chess Bot Benchmark — 20260614_170608
+Time control: bot=1.0s/move, SF=0.1s/move
+Games per level: 10
+
+  ELO     W    D    L   Score%    ACPL
+---------------------------------------------
+ 1320     0    0   10     0.0%     0.0
+ 1400     0    0   10     0.0%     0.0
+ 1500     0    0   10     0.0%     0.0
+ 1600     0    0   10     0.0%     0.0
+ 1800     0    0   10     0.0%     0.0
+
+
+Chi tiết từng ván:
+ELO 1320 | Ván  1 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1320 | Ván  2 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1320 | Ván  3 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1320 | Ván  4 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1320 | Ván  5 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1320 | Ván  6 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1320 | Ván  7 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1320 | Ván  8 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1320 | Ván  9 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1320 | Ván 10 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1400 | Ván  1 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1400 | Ván  2 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1400 | Ván  3 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1400 | Ván  4 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1400 | Ván  5 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1400 | Ván  6 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1400 | Ván  7 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1400 | Ván  8 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1400 | Ván  9 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1400 | Ván 10 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1500 | Ván  1 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1500 | Ván  2 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1500 | Ván  3 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1500 | Ván  4 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1500 | Ván  5 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1500 | Ván  6 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1500 | Ván  7 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1500 | Ván  8 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1500 | Ván  9 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1500 | Ván 10 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1600 | Ván  1 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1600 | Ván  2 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1600 | Ván  3 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1600 | Ván  4 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1600 | Ván  5 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1600 | Ván  6 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1600 | Ván  7 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1600 | Ván  8 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1600 | Ván  9 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1600 | Ván 10 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1800 | Ván  1 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1800 | Ván  2 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1800 | Ván  3 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1800 | Ván  4 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1800 | Ván  5 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1800 | Ván  6 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1800 | Ván  7 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1800 | Ván  8 | black | loss  |   1 nước | ACPL   0.0 | bot_error
+ELO 1800 | Ván  9 | white | loss  |   0 nước | ACPL   0.0 | bot_error
+ELO 1800 | Ván 10 | black | loss  |   1 nước | ACPL   0.0 | bot_error
