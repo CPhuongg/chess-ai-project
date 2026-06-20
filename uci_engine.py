@@ -18,6 +18,9 @@ from bot import ChessBot  # noqa: E402
 ENGINE_NAME = "MyChessBot"
 ENGINE_AUTHOR = "chess-ai-project"
 DEFAULT_SEARCH_MS = 30_000
+DEFAULT_DEPTH = 3
+MIN_DEPTH = 1
+MAX_DEPTH = 10
 
 
 def uci_write(message):
@@ -43,6 +46,7 @@ def parse_int_option(tokens, name, default=None):
 class UCIEngine:
     def __init__(self):
         self.chess_bot = ChessBot()
+        self.default_depth = DEFAULT_DEPTH
 
     def run(self):
         for raw_line in sys.stdin:
@@ -66,7 +70,15 @@ class UCIEngine:
         if command == "uci":
             uci_write(f"id name {ENGINE_NAME}")
             uci_write(f"id author {ENGINE_AUTHOR}")
+            uci_write(
+                "option name MyAI_DefaultDepth type spin "
+                f"default {DEFAULT_DEPTH} min {MIN_DEPTH} max {MAX_DEPTH}"
+            )
             uci_write("uciok")
+            return False
+
+        if command == "setoption":
+            self.handle_setoption(tokens)
             return False
 
         if command == "isready":
@@ -100,6 +112,29 @@ class UCIEngine:
         self.chess_bot.set_position()
         if hasattr(self.chess_bot, "notify_new_game"):
             self.chess_bot.notify_new_game()
+
+    def handle_setoption(self, tokens):
+        name_index = self._find_token(tokens, "name", start_index=1)
+        if name_index is None or name_index + 1 >= len(tokens):
+            return
+
+        value_index = self._find_token(tokens, "value", start_index=name_index + 1)
+        if value_index is None:
+            option_name = " ".join(tokens[name_index + 1:])
+            option_value = None
+        else:
+            option_name = " ".join(tokens[name_index + 1:value_index])
+            option_value = " ".join(tokens[value_index + 1:])
+
+        if option_name != "MyAI_DefaultDepth" or option_value is None:
+            return
+
+        try:
+            depth = int(option_value)
+        except ValueError:
+            return
+
+        self.default_depth = max(MIN_DEPTH, min(MAX_DEPTH, depth))
 
     def handle_position(self, tokens):
         if len(tokens) < 2:
@@ -150,7 +185,7 @@ class UCIEngine:
             self.chess_bot.quit()
 
     def _get_best_move(self, depth=None, time_ms=None):
-        search_depth = depth if depth is not None else 3
+        search_depth = depth if depth is not None else self.default_depth
         move = self.chess_bot.get_best_move(depth=search_depth, time_ms=time_ms)
 
         if move:

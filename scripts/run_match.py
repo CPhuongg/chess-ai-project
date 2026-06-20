@@ -12,6 +12,9 @@ from pathlib import Path
 
 
 MY_ENGINE_NAME = "MyAI"
+DEFAULT_MYAI_DEPTH = 3
+MIN_MYAI_DEPTH = 1
+MAX_MYAI_DEPTH = 10
 DEFAULT_CUTECHESS_PATH = Path("tools") / "cutechess" / "cutechess-cli.exe"
 
 
@@ -57,7 +60,13 @@ def shell_display(command):
     return shlex.join(str(part) for part in command)
 
 
-def build_command(root, cutechess_path, time_control, opponent, games, pgn_path):
+def myai_name(depth):
+    if depth == DEFAULT_MYAI_DEPTH:
+        return MY_ENGINE_NAME
+    return f"{MY_ENGINE_NAME}-depth{depth}"
+
+
+def build_command(root, cutechess_path, time_control, opponent, games, pgn_path, myai_depth):
     python_exe = Path(sys.executable)
     uci_engine = root / "uci_engine.py"
     stockfish_exe = resolve_from_root(root, opponent["cmd"])
@@ -68,13 +77,21 @@ def build_command(root, cutechess_path, time_control, opponent, games, pgn_path)
         f"cmd={python_exe}",
         f"arg={uci_engine}",
         f"dir={root}",
-        f"name={MY_ENGINE_NAME}",
+        f"name={myai_name(myai_depth)}",
         "proto=uci",
-        "-engine",
-        f"cmd={stockfish_exe}",
-        f"name={opponent['name']}",
-        f"proto={opponent.get('proto', 'uci')}",
     ]
+
+    if myai_depth != DEFAULT_MYAI_DEPTH:
+        command.append(f"option.MyAI_DefaultDepth={myai_depth}")
+
+    command.extend(
+        [
+            "-engine",
+            f"cmd={stockfish_exe}",
+            f"name={opponent['name']}",
+            f"proto={opponent.get('proto', 'uci')}",
+        ]
+    )
 
     for option_name, option_value in opponent.get("options", {}).items():
         command.append(f"option.{option_name}={option_value}")
@@ -104,6 +121,12 @@ def parse_args():
         default=str(DEFAULT_CUTECHESS_PATH),
         help="Path to cutechess-cli.exe. Defaults to tools/cutechess/cutechess-cli.exe.",
     )
+    parser.add_argument(
+        "--myai-depth",
+        type=int,
+        default=DEFAULT_MYAI_DEPTH,
+        help=f"MyAI default UCI search depth. Defaults to {DEFAULT_MYAI_DEPTH}.",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Print the command without running it.")
     return parser.parse_args()
 
@@ -114,6 +137,8 @@ def main():
 
     if args.games <= 0:
         raise ValueError("--games must be a positive integer.")
+    if not MIN_MYAI_DEPTH <= args.myai_depth <= MAX_MYAI_DEPTH:
+        raise ValueError(f"--myai-depth must be between {MIN_MYAI_DEPTH} and {MAX_MYAI_DEPTH}.")
 
     uci_engine = root / "uci_engine.py"
     time_controls_path = root / "configs" / "time_controls.json"
@@ -144,12 +169,21 @@ def main():
     results_dir = root / "results" / time_control["category"]
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    file_stem = f"myai_vs_{opponent['id']}_{time_control['id']}"
+    depth_suffix = "" if args.myai_depth == DEFAULT_MYAI_DEPTH else f"_depth{args.myai_depth}"
+    file_stem = f"myai_vs_{opponent['id']}_{time_control['id']}{depth_suffix}"
     pgn_path = results_dir / f"{file_stem}.pgn"
     stdout_path = results_dir / f"{file_stem}_out.txt"
     stderr_path = results_dir / f"{file_stem}_err.txt"
 
-    command = build_command(root, cutechess_path, time_control, opponent, args.games, pgn_path)
+    command = build_command(
+        root,
+        cutechess_path,
+        time_control,
+        opponent,
+        args.games,
+        pgn_path,
+        args.myai_depth,
+    )
 
     print("Cute Chess command:")
     print(shell_display(command))

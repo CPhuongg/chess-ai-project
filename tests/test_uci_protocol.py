@@ -62,10 +62,23 @@ class UCIProtocolTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("uciok", result.stdout)
+        self.assertIn(
+            "option name MyAI_DefaultDepth type spin default 3 min 1 max 10",
+            result.stdout,
+        )
         self.assert_stdout_clean(result.stdout)
 
     def test_isready_command_returns_readyok(self):
         result = self.run_engine(["isready", "quit"])
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("readyok", result.stdout)
+        self.assert_stdout_clean(result.stdout)
+
+    def test_setoption_default_depth_does_not_crash(self):
+        result = self.run_engine(
+            ["setoption name MyAI_DefaultDepth value 5", "isready", "quit"]
+        )
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("readyok", result.stdout)
@@ -79,6 +92,20 @@ class UCIProtocolTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("uciok", result.stdout)
         self.assertIn("readyok", result.stdout)
+        self.assert_stdout_clean(result.stdout)
+        self.assert_bestmove_is_legal(result.stdout, chess.Board())
+
+    def test_setoption_default_depth_then_go_returns_legal_move(self):
+        result = self.run_engine(
+            [
+                "setoption name MyAI_DefaultDepth value 5",
+                "position startpos",
+                "go movetime 1000",
+                "quit",
+            ]
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
         self.assert_stdout_clean(result.stdout)
         self.assert_bestmove_is_legal(result.stdout, chess.Board())
 
